@@ -1112,6 +1112,7 @@
         saveState();
         render();
       }
+      var catDragRow = null, catDragBeforeOrder = null;
       function renderCategoryOrder() {
         var wrap = document.getElementById("categoryOrderList");
         wrap.innerHTML = "";
@@ -1119,7 +1120,6 @@
         var cats = categoryOrder().filter(function (c) {
           return state.habits.some(function (h) { return (h.category || "Other") === c; });
         });
-        var dragRow = null, beforeOrder = null;
         cats.forEach(function (c) {
           var row = document.createElement("div");
           row.className = "cat-order-row";
@@ -1134,36 +1134,48 @@
           row.appendChild(label);
           // Pointer drag (not HTML5 drag): HTML5 drag does not work on
           // touch, and this tracker is mostly used on a phone.
+          // Move/end listeners live on the document, not the row: once
+          // the pointer leaves the dragged row, its own move events stop
+          // firing and the row under the pointer ignores them — that was
+          // why the first version never moved at all.
           row.addEventListener("pointerdown", function (ev) {
-            dragRow = row;
-            beforeOrder = Array.prototype.map.call(wrap.children, function (r) { return r.getAttribute("data-cat"); });
+            catDragRow = row;
+            catDragBeforeOrder = Array.prototype.map.call(wrap.children, function (r) { return r.getAttribute("data-cat"); });
             row.classList.add("dragging");
-            try { row.setPointerCapture(ev.pointerId); } catch (e) {}
+            ev.preventDefault();
           });
-          row.addEventListener("pointermove", function (ev) {
-            if (dragRow !== row) return;
+          wrap.appendChild(row);
+        });
+        if (!window.__catDragDocListener) {
+          window.__catDragDocListener = true;
+          document.addEventListener("pointermove", function (ev) {
+            if (!catDragRow) return;
+            var list = document.getElementById("categoryOrderList");
+            if (!list) return;
             var y = ev.clientY;
-            var rows = Array.prototype.slice.call(wrap.children);
+            var rows = Array.prototype.slice.call(list.children);
             var target = null;
             for (var i = 0; i < rows.length; i++) {
-              if (rows[i] === row) continue;
+              if (rows[i] === catDragRow) continue;
               var r = rows[i].getBoundingClientRect();
               if (y < r.top + r.height / 2) { target = rows[i]; break; }
             }
-            if (target) wrap.insertBefore(row, target);
-            else wrap.appendChild(row);
+            if (target) list.insertBefore(catDragRow, target);
+            else list.appendChild(catDragRow);
           });
-          function endDrag() {
-            if (dragRow !== row) return;
+          function endCatDrag() {
+            if (!catDragRow) return;
+            var list = document.getElementById("categoryOrderList");
+            var row = catDragRow;
             row.classList.remove("dragging");
-            dragRow = null;
-            var afterOrder = Array.prototype.map.call(wrap.children, function (r) { return r.getAttribute("data-cat"); });
-            if (beforeOrder && afterOrder.join("|") !== beforeOrder.join("|")) applyCategoryOrder(afterOrder);
+            catDragRow = null;
+            if (!list) return;
+            var afterOrder = Array.prototype.map.call(list.children, function (r) { return r.getAttribute("data-cat"); });
+            if (catDragBeforeOrder && afterOrder.join("|") !== catDragBeforeOrder.join("|")) applyCategoryOrder(afterOrder);
           }
-          row.addEventListener("pointerup", endDrag);
-          row.addEventListener("pointercancel", endDrag);
-          wrap.appendChild(row);
-        });
+          document.addEventListener("pointerup", endCatDrag);
+          document.addEventListener("pointercancel", endCatDrag);
+        }
       }
 
       function moveHabit(id, newCategory) {
