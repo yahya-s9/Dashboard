@@ -295,28 +295,50 @@
         } catch (e) {}
       }
       function syncFromSheet() {
+        // Load via a <script> tag (JSONP) instead of fetch: Apps Script
+        // fetch responses are CORS-flaky from a static site, and a failed
+        // fetch here used to leave the page stuck on "offline".
         setSyncNote("syncing…");
-        return fetch(API_URL).then(function (r) { return r.json(); }).then(function (data) {
-          if (!data || !data.ok || !Array.isArray(data.habits)) throw new Error("bad sync response");
-          var newHabits = data.habits.map(function (h) {
-            return { id: nextId(), name: h.name, category: h.category || null };
-          });
-          var newChecks = {};
-          (data.checkins || []).forEach(function (c) {
-            var h = null;
-            newHabits.forEach(function (x) { if (x.name === c.habit) h = x; });
-            if (!h) return;
-            if (!newChecks[c.date]) newChecks[c.date] = {};
-            newChecks[c.date][h.id] = true;
-          });
-          state.habits = newHabits;
-          state.checks = newChecks;
-          saveState();
-          setSyncNote("synced with Google Sheet");
-          render();
-        }).catch(function () {
-          setSyncNote("offline — saved on this device only");
-        });
+        var cbName = "__sheetSyncCb_" + Date.now();
+        var done = false;
+        var timer = setTimeout(function () { if (!done) { done = true; cleanup(); setSyncNote("offline — saved on this device only"); } }, 20000);
+        function cleanup() {
+          clearTimeout(timer);
+          var s = document.getElementById("sheetSyncScript");
+          if (s) s.remove();
+          try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+        }
+        window[cbName] = function (data) {
+          if (done) return;
+          done = true;
+          cleanup();
+          try {
+            if (!data || !data.ok || !Array.isArray(data.habits)) throw new Error("bad sync response");
+            var newHabits = data.habits.map(function (h) {
+              return { id: nextId(), name: h.name, category: h.category || null };
+            });
+            var newChecks = {};
+            (data.checkins || []).forEach(function (c) {
+              var h = null;
+              newHabits.forEach(function (x) { if (x.name === c.habit) h = x; });
+              if (!h) return;
+              if (!newChecks[c.date]) newChecks[c.date] = {};
+              newChecks[c.date][h.id] = true;
+            });
+            state.habits = newHabits;
+            state.checks = newChecks;
+            saveState();
+            setSyncNote("synced with Google Sheet");
+            render();
+          } catch (e) {
+            setSyncNote("offline — saved on this device only");
+          }
+        };
+        var script = document.createElement("script");
+        script.id = "sheetSyncScript";
+        script.onerror = function () { if (!done) { done = true; cleanup(); setSyncNote("offline — saved on this device only"); } };
+        script.src = API_URL + "?callback=" + cbName + "&ts=" + Date.now();
+        document.head.appendChild(script);
       }
 
       // ---------- Date helpers ----------
