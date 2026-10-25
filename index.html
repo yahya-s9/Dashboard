@@ -108,8 +108,15 @@
       .graph-total { display: flex; align-items: baseline; gap: 0.75rem; }
       .graph-total .big { font-size: 3.2rem; font-weight: 600; line-height: 1; }
       .graph-total .cap { color: var(--dim); font-size: 0.9rem; }
-      .graph-wrap { margin-top: 0.75rem; }
+      .graph-wrap { margin-top: 0.75rem; position: relative; }
       .graph-wrap svg { display: block; width: 100%; height: auto; }
+      .graph-tip {
+        position: absolute; z-index: 2; display: none; pointer-events: none;
+        transform: translate(-50%, -130%); white-space: nowrap;
+        background: var(--text); color: var(--bg); font-size: 0.8rem; font-weight: 600;
+        padding: 0.3rem 0.55rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+      }
+      .graph-tip.show { display: block; }
       .graph-note { color: var(--dim); font-size: 0.9rem; margin: 0.35rem 0 0.25rem; }
       .graph-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; margin-top: 0.6rem; font-size: 0.82rem; color: var(--dim); }
       .graph-legend .leg { display: flex; align-items: center; gap: 0.35rem; }
@@ -245,7 +252,7 @@
           <span class="big font-display" id="totalBig">0</span>
           <span class="cap" id="totalCap">daily score</span>
         </div>
-        <div class="graph-wrap" id="graphWrap"></div>
+        <div class="graph-wrap" id="graphWrap"><div class="graph-tip" id="graphTip"></div></div>
         <div class="graph-legend" id="graphLegend"></div>
         <p class="graph-note" id="prayerNote" hidden>All 5 prayers weren't done, so this day's score is 0.</p>
         <p class="graph-note" id="graphNote" hidden>Your first bar appears with your first check below.</p>
@@ -633,7 +640,7 @@
           if (!p.prayers) {
             var yTop = y(p.raw);
             var h = y(0) - yTop;
-            return '<rect x="' + x(pi) + '" y="' + yTop.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1).toFixed(1) + '" rx="2" style="fill:var(--dim)" opacity="0.55"><title>' + shortLabel(p.day) + " · Score 0 — prayers incomplete (" + p.raw + " checked)</title></rect>";
+            return '<rect data-day="' + p.day + '" data-cat="Prayers incomplete" data-count="' + p.raw + '" x="' + x(pi) + '" y="' + yTop.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1).toFixed(1) + '" rx="2" style="fill:var(--dim)" opacity="0.55"><title>' + shortLabel(p.day) + " · Score 0 — prayers incomplete (" + p.raw + " checked)</title></rect>";
           }
           var acc = 0;
           return cats.map(function (c) {
@@ -643,14 +650,42 @@
             var h2 = y(acc) - yTop2;
             acc += v;
             var color = categoryColor(c);
-            return '<rect x="' + x(pi) + '" y="' + yTop2.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h2, 1).toFixed(1) + '" rx="2" fill="' + color + '"><title>' + shortLabel(p.day) + " · " + c + ": " + v + "</title></rect>";
+            return '<rect data-day="' + p.day + '" data-cat="' + c + '" data-count="' + v + '" x="' + x(pi) + '" y="' + yTop2.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h2, 1).toFixed(1) + '" rx="2" fill="' + color + '"><title>' + shortLabel(p.day) + " · " + c + ": " + v + "</title></rect>";
           }).join("");
         }).join("");
 
         wrap.innerHTML =
           '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Stacked bar chart of daily scores by category, selected day score ' + score + '">' +
           gridSvg + bars + xSvg +
-          "</svg>";
+          "</svg>" +
+          '<div class="graph-tip" id="graphTip"></div>';
+        // Custom tooltip: hover on desktop, tap on a phone (native SVG
+        // <title> tooltips are slow and don't fire on touch at all).
+        var tip = document.getElementById("graphTip");
+        function showTip(rect, ev) {
+          var r = wrap.getBoundingClientRect();
+          var x = ev.clientX - r.left, y = ev.clientY - r.top;
+          tip.textContent = shortLabel(rect.getAttribute("data-day")) + " · " +
+            rect.getAttribute("data-cat") + " · " + rect.getAttribute("data-count");
+          tip.style.left = Math.max(50, Math.min(r.width - 50, x)) + "px";
+          tip.style.top = Math.max(28, y) + "px";
+          tip.classList.add("show");
+        }
+        function hideTip() { tip.classList.remove("show"); }
+        wrap.querySelectorAll("rect[data-cat]").forEach(function (rect) {
+          rect.addEventListener("mouseenter", function (ev) { showTip(rect, ev); });
+          rect.addEventListener("mousemove", function (ev) { showTip(rect, ev); });
+          rect.addEventListener("mouseleave", hideTip);
+          rect.addEventListener("click", function (ev) { showTip(rect, ev); ev.stopPropagation(); });
+        });
+        if (!window.__graphTipDocListener) {
+          window.__graphTipDocListener = true;
+          document.addEventListener("click", function (ev) {
+            var t = document.getElementById("graphTip");
+            var w = document.getElementById("graphWrap");
+            if (t && w && !w.contains(ev.target)) t.classList.remove("show");
+          });
+        }
 
         // Legend: the selected day's breakdown. A gray day shows only
         // the prayers-incomplete note instead of category colors.
