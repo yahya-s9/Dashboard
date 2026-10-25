@@ -211,6 +211,10 @@
         background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 1rem;
       }
       form.add button[type="submit"]:disabled { opacity: 0.4; cursor: default; }
+      .color-pick { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 0.35rem; }
+      .color-swatch { width: 2rem; height: 2rem; border-radius: 50%; border: 2px solid transparent; padding: 0; flex: none; }
+      .color-swatch.selected { border-color: var(--text); transform: scale(1.12); }
+      .habit-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
       .device-note { color: var(--dim); font-size: 0.85rem; margin-top: 1.25rem; }
       .empty { text-align: center; color: var(--dim); padding: 2rem 0; font-size: 0.95rem; }
     </style>
@@ -274,6 +278,8 @@
           <label for="newCategory">Category (optional)</label>
           <input id="newCategory" type="text" placeholder="e.g. Health" list="categoryList" autocomplete="off" />
           <datalist id="categoryList"></datalist>
+          <label>Color (optional — leave it to follow the category)</label>
+          <div class="color-pick" id="colorPick" role="group" aria-label="Habit color"></div>
           <button type="submit" id="addBtn" disabled>Add habit</button>
         </form>
         <p class="device-note">Check-ins sync to a Google Sheet when online, and are also saved on this device as a backup. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
@@ -315,6 +321,22 @@
         "Behaviors": "#f97316",
         "Health": "#eab308"
       };
+      var PALETTE = ["#2fbf71", "#8b5cf6", "#3b82f6", "#06b6d4", "#ef4444", "#ec4899", "#f97316", "#eab308", "#14b8a6", "#84cc16"];
+      // A habit's own color, falling back to its category color.
+      function habitColor(h) {
+        return (h && h.color) || CATEGORY_COLORS[h && h.category] || "#6f6a5e";
+      }
+      // Graph/heatmap show one color per category: if every habit in the
+      // category picked the same custom color, use it; otherwise keep the
+      // category default (mixed custom colors can't both show in one bar).
+      function categoryColor(c) {
+        var seen = [];
+        state.habits.forEach(function (h) {
+          if ((h.category || "Other") === c && h.color && seen.indexOf(h.color) === -1) seen.push(h.color);
+        });
+        if (seen.length === 1) return seen[0];
+        return CATEGORY_COLORS[c] || "#6f6a5e";
+      }
 
       // ---------- Storage (this device only) ----------
       var STORE_KEY = "daily-habit-tracker-v1";
@@ -400,7 +422,7 @@
           try {
             if (!data || !data.ok || !Array.isArray(data.habits)) throw new Error("bad sync response");
             var newHabits = data.habits.map(function (h) {
-              return { id: nextId(), name: h.name, category: h.category || null };
+              return { id: nextId(), name: h.name, category: h.category || null, color: h.color || null };
             });
             var newChecks = {};
             (data.checkins || []).forEach(function (c) {
@@ -610,7 +632,7 @@
             var yTop2 = y(acc + v);
             var h2 = y(acc) - yTop2;
             acc += v;
-            var color = CATEGORY_COLORS[c] || "var(--dim)";
+            var color = categoryColor(c);
             return '<rect x="' + x(pi) + '" y="' + yTop2.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h2, 1).toFixed(1) + '" rx="2" fill="' + color + '"><title>' + shortLabel(p.day) + " · " + c + ": " + v + "</title></rect>";
           }).join("");
         }).join("");
@@ -628,7 +650,7 @@
         } else {
           var selCounts = selected ? selected.counts : {};
           legend.innerHTML = cats.filter(function (c) { return (selCounts[c] || 0) > 0; }).map(function (c) {
-            var color = CATEGORY_COLORS[c] || "var(--dim)";
+            var color = categoryColor(c);
             return '<span class="leg"><span class="sw" style="background:' + color + '"></span>' + c + " · " + (selCounts[c] || 0) + "</span>";
           }).join("");
         }
@@ -665,7 +687,7 @@
         cats.forEach(function (c) {
           var habitsInCat = state.habits.filter(function (h) { return (h.category || "Other") === c; });
           var total = habitsInCat.length;
-          var color = CATEGORY_COLORS[c];
+          var color = categoryColor(c);
           var rgb = color ? hexToRgb(color) : null;
           html += '<div class="heat-row"><span class="heat-label">' + c + "</span><span class=\"heat-cells\">";
           for (var day = 1; day <= daysInMonth; day++) {
@@ -752,7 +774,7 @@
         document.getElementById("bfNextMonth").disabled = isCurrentMonth;
         var firstDow = new Date(year, month, 1).getDay();
         var daysInMonth = new Date(year, month + 1, 0).getDate();
-        var color = CATEGORY_COLORS[habit.category] || "#6f6a5e";
+        var color = habitColor(habit);
         var html = ["S", "M", "T", "W", "T", "F", "S"].map(function (d) {
           return '<span class="bf-dow">' + d + "</span>";
         }).join("");
@@ -848,7 +870,7 @@
             var h2 = document.createElement("h2");
             var sw = document.createElement("span");
             sw.className = "swatch";
-            sw.style.background = CATEGORY_COLORS[group.category] || "var(--dim)";
+            sw.style.background = categoryColor(group.category);
             h2.appendChild(sw);
             h2.appendChild(document.createTextNode(group.category));
             var doneInGroup = group.items.filter(function (h) {
@@ -878,6 +900,12 @@
             box.setAttribute("aria-hidden", "true");
             box.textContent = "✓";
             btn.appendChild(box);
+
+            var dot = document.createElement("span");
+            dot.className = "habit-dot";
+            dot.style.background = habitColor(habit);
+            dot.setAttribute("aria-hidden", "true");
+            btn.appendChild(dot);
 
             var name = document.createElement("span");
             name.className = "habit-name";
@@ -987,17 +1015,39 @@
       var newName = document.getElementById("newName");
       var newCategory = document.getElementById("newCategory");
       var addBtn = document.getElementById("addBtn");
+      var colorPickEl = document.getElementById("colorPick");
+      var pickedColor = null; // null = follow the category color
+      function renderColorPick() {
+        var def = CATEGORY_COLORS[newCategory.value.trim()] || PALETTE[0];
+        var selected = pickedColor || def;
+        colorPickEl.innerHTML = "";
+        PALETTE.forEach(function (c) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "color-swatch" + (c === selected ? " selected" : "");
+          b.style.background = c;
+          b.setAttribute("aria-label", "Color " + c);
+          b.setAttribute("aria-pressed", c === selected ? "true" : "false");
+          b.addEventListener("click", function () { pickedColor = c; renderColorPick(); });
+          colorPickEl.appendChild(b);
+        });
+      }
+      renderColorPick();
+      newCategory.addEventListener("input", function () { if (!pickedColor) renderColorPick(); });
       newName.addEventListener("input", function () { addBtn.disabled = !newName.value.trim(); });
       addForm.addEventListener("submit", function (e) {
         e.preventDefault();
         var name = newName.value.trim();
         if (!name) return;
         var category = newCategory.value.trim();
-        state.habits.push({ id: nextId(), name: name, category: category || null });
+        var chosenColor = pickedColor;
+        state.habits.push({ id: nextId(), name: name, category: category || null, color: chosenColor });
         newName.value = "";
         newCategory.value = "";
+        pickedColor = null;
+        renderColorPick();
         addBtn.disabled = true;
-        apiPost({ action: "addHabit", name: name, category: category });
+        apiPost({ action: "addHabit", name: name, category: category, color: chosenColor || "" });
         saveState();
         render();
       });
