@@ -132,6 +132,32 @@
       .heat-daynum { flex: 1; text-align: center; font-size: 0.55rem; color: var(--dim); line-height: 1; }
       .heatmap-note { color: var(--dim); font-size: 0.85rem; margin: 0.6rem 0 0.25rem; }
 
+      /* ---- Backfill panel ---- */
+      .backfill-card {
+        margin-top: 1.1rem; padding: 1rem 1rem 0.75rem;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      .backfill-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+      .backfill-head h2 { flex: 1; font-size: 0.85rem; font-weight: 700; margin: 0; }
+      .backfill-card select {
+        width: 100%; min-height: 2.75rem; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface); color: var(--text); padding: 0 0.6rem; font: inherit; margin-bottom: 0.75rem;
+      }
+      .bf-month { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+      .bf-month span { font-weight: 600; font-size: 0.95rem; }
+      .bf-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+      .bf-dow { text-align: center; font-size: 0.7rem; color: var(--dim); text-transform: uppercase; }
+      .bf-cell {
+        aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--border);
+        background: var(--surface-2); color: var(--text); font-size: 0.9rem;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .bf-cell.future { opacity: 0.35; }
+      .bf-cell.today { outline: 1.5px solid var(--accent); outline-offset: 0; }
+      .bf-cell.checked { border-color: transparent; color: #fff; font-weight: 700; }
+      .bf-count { color: var(--dim); font-size: 0.85rem; margin: 0.6rem 0 0.25rem; }
+
       /* ---- Habit list ---- */
       .group { margin-top: 1.4rem; }
       .group h2 {
@@ -213,10 +239,27 @@
         <p class="heatmap-note">Darker = more of that category done that day. Tap a day to open it.</p>
       </section>
 
+      <section class="backfill-card" id="backfillPanel" hidden aria-label="Backfill a habit">
+        <div class="backfill-head">
+          <h2>Backfill a habit</h2>
+          <button type="button" class="edit-toggle" id="backfillClose">Done</button>
+        </div>
+        <label for="backfillHabit" class="device-note" style="margin-top:0">Pick a habit, then tap days to check or uncheck it — no scrolling day by day.</label>
+        <select id="backfillHabit" aria-label="Habit to backfill"></select>
+        <div class="bf-month">
+          <button type="button" class="day-nav" id="bfPrevMonth" aria-label="Previous month">‹</button>
+          <span id="bfMonthTitle"></span>
+          <button type="button" class="day-nav" id="bfNextMonth" aria-label="Next month">›</button>
+        </div>
+        <div class="bf-grid" id="bfGrid"></div>
+        <p class="bf-count" id="bfCount"></p>
+      </section>
+
       <section id="habitList" aria-label="Habits"></section>
 
       <footer>
         <button type="button" class="edit-toggle" id="syncBtn">Sync now</button>
+        <button type="button" class="edit-toggle" id="backfillToggle" aria-expanded="false" style="margin-left:1rem">Backfill a habit</button>
         <p class="device-note" id="syncNote">Sync: not yet checked.</p>
         <button type="button" class="edit-toggle" id="editToggle" aria-expanded="false">Edit habits</button>
         <form class="add" id="addForm" hidden>
@@ -650,6 +693,85 @@
         });
       }
 
+      // ---------- Backfill: one habit, many days, one screen ----------
+      var backfillOpen = false;
+      var backfillHabitId = null;
+      var backfillYear = null, backfillMonth = null; // null = current month
+      function backfillMonthParts() {
+        if (backfillYear === null) {
+          var d = parseDay(today);
+          return { year: d.getFullYear(), month: d.getMonth() };
+        }
+        return { year: backfillYear, month: backfillMonth };
+      }
+      function toggleHabitForDay(id, day) {
+        var habit = habitById(id);
+        if (!habit) return;
+        if (!state.checks[day]) state.checks[day] = {};
+        if (state.checks[day][id]) {
+          delete state.checks[day][id];
+          if (Object.keys(state.checks[day]).length === 0) delete state.checks[day];
+          apiPost({ action: "uncheck", date: day, habit: habit.name });
+        } else {
+          state.checks[day][id] = true;
+          apiPost({ action: "check", date: day, habit: habit.name, category: habit.category || "" });
+        }
+        saveState();
+        render();
+      }
+      function renderBackfillPanel() {
+        var panel = document.getElementById("backfillPanel");
+        panel.hidden = !backfillOpen;
+        if (!backfillOpen) return;
+        var sel = document.getElementById("backfillHabit");
+        var prevId = backfillHabitId;
+        sel.innerHTML = "";
+        state.habits.forEach(function (h) {
+          var opt = document.createElement("option");
+          opt.value = h.id;
+          opt.textContent = (h.category ? h.category + " · " : "") + h.name;
+          sel.appendChild(opt);
+        });
+        var habit = habitById(prevId) || state.habits[0];
+        if (!habit) { document.getElementById("bfGrid").innerHTML = ""; return; }
+        backfillHabitId = habit.id;
+        sel.value = habit.id;
+        var parts = backfillMonthParts();
+        var year = parts.year, month = parts.month;
+        document.getElementById("bfMonthTitle").textContent =
+          new Date(year, month, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+        var cur = parseDay(today);
+        var isCurrentMonth = year === cur.getFullYear() && month === cur.getMonth();
+        document.getElementById("bfNextMonth").disabled = isCurrentMonth;
+        var firstDow = new Date(year, month, 1).getDay();
+        var daysInMonth = new Date(year, month + 1, 0).getDate();
+        var color = CATEGORY_COLORS[habit.category] || "#6f6a5e";
+        var html = ["S", "M", "T", "W", "T", "F", "S"].map(function (d) {
+          return '<span class="bf-dow">' + d + "</span>";
+        }).join("");
+        for (var i = 0; i < firstDow; i++) html += "<span></span>";
+        var checkedCount = 0;
+        for (var day = 1; day <= daysInMonth; day++) {
+          var ds = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+          var isFuture = ds > today;
+          var checked = !!(state.checks[ds] && state.checks[ds][habit.id]);
+          if (checked) checkedCount += 1;
+          var cls = "bf-cell" + (checked ? " checked" : "") + (isFuture ? " future" : "") + (ds === today ? " today" : "");
+          var style = checked ? ' style="background:' + color + ';border-color:transparent"' : "";
+          html += '<button type="button" class="' + cls + '" data-day="' + ds + '"' + style +
+            (isFuture ? " disabled" : "") + ' aria-label="' + ds + " " + habit.name + (checked ? ", checked" : "") + '">' + day + "</button>";
+        }
+        document.getElementById("bfGrid").innerHTML = html;
+        document.getElementById("bfCount").textContent =
+          habit.name + " checked " + checkedCount + " day" + (checkedCount === 1 ? "" : "s") + " in " +
+          new Date(year, month, 1).toLocaleDateString(undefined, { month: "long" }) + ".";
+        document.getElementById("bfGrid").querySelectorAll(".bf-cell[data-day]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            toggleHabitForDay(backfillHabitId, btn.getAttribute("data-day"));
+          });
+        });
+      }
+
       // ---------- Rendering ----------
       var weekStrip = document.getElementById("weekStrip");
       var habitList = document.getElementById("habitList");
@@ -694,6 +816,7 @@
 
         renderGraph();
         renderHeatmap();
+        renderBackfillPanel();
 
         // Habit groups, preserving list order
         habitList.innerHTML = "";
@@ -870,6 +993,38 @@
         apiPost({ action: "addHabit", name: name, category: category });
         saveState();
         render();
+      });
+
+      document.getElementById("backfillToggle").addEventListener("click", function () {
+        backfillOpen = !backfillOpen;
+        document.getElementById("backfillToggle").textContent = backfillOpen ? "Close backfill" : "Backfill a habit";
+        document.getElementById("backfillToggle").setAttribute("aria-expanded", backfillOpen ? "true" : "false");
+        render();
+        if (backfillOpen) document.getElementById("backfillPanel").scrollIntoView();
+      });
+      document.getElementById("backfillClose").addEventListener("click", function () {
+        backfillOpen = false;
+        document.getElementById("backfillToggle").textContent = "Backfill a habit";
+        document.getElementById("backfillToggle").setAttribute("aria-expanded", "false");
+        render();
+      });
+      document.getElementById("backfillHabit").addEventListener("change", function (e) {
+        backfillHabitId = e.target.value;
+        renderBackfillPanel();
+      });
+      document.getElementById("bfPrevMonth").addEventListener("click", function () {
+        var parts = backfillMonthParts();
+        var dt = new Date(parts.year, parts.month - 1, 1);
+        backfillYear = dt.getFullYear(); backfillMonth = dt.getMonth();
+        renderBackfillPanel();
+      });
+      document.getElementById("bfNextMonth").addEventListener("click", function () {
+        var parts = backfillMonthParts();
+        var dt = new Date(parts.year, parts.month + 1, 1);
+        var cur = parseDay(today);
+        if (dt.getFullYear() > cur.getFullYear() || (dt.getFullYear() === cur.getFullYear() && dt.getMonth() > cur.getMonth())) return;
+        backfillYear = dt.getFullYear(); backfillMonth = dt.getMonth();
+        renderBackfillPanel();
       });
 
       document.getElementById("syncBtn").addEventListener("click", function () { syncFromSheet(); });
