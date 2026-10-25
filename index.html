@@ -119,17 +119,25 @@
       .heatmap-card {
         margin-top: 1.1rem; padding: 1rem 1rem 0.75rem;
         background: var(--surface); border: 1px solid var(--border);
-        border-radius: var(--radius);
+        border-radius: var(--radius); overflow: hidden;
       }
       .heatmap-card h2 { font-size: 0.85rem; font-weight: 700; margin: 0 0 0.6rem; }
-      .heatmap { display: flex; flex-direction: column; gap: 3px; }
-      .heat-row { display: flex; gap: 2px; align-items: center; }
-      .heat-label { flex: 0 0 88px; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .heat-cells { flex: 1; display: flex; gap: 2px; }
-      .heat-cell { flex: 1; aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--border); padding: 0; }
+      .heatmap { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .heat-row { display: flex; gap: 2px; align-items: center; min-width: 0; }
+      .heat-label { flex: 0 0 88px; min-width: 0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .heat-cells { flex: 1; display: flex; gap: 2px; min-width: 0; }
+      .heat-cell { flex: 1 1 0; min-width: 0; aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--border); padding: 0; }
       .heat-cell.future { background: transparent; opacity: 0.35; }
       .heat-cell.today { outline: 1.5px solid var(--accent); outline-offset: 0; }
-      .heat-daynum { flex: 1; text-align: center; font-size: 0.55rem; color: var(--dim); line-height: 1; }
+      .heat-daynum { flex: 1 1 0; min-width: 0; overflow: hidden; text-align: center; font-size: 0.55rem; color: var(--dim); line-height: 1; }
+      @media (max-width: 520px) {
+        .heatmap-card { padding: 0.75rem 0.5rem; }
+        .heat-row { gap: 1px; }
+        .heat-label { flex-basis: 62px; font-size: 0.72rem; }
+        .heat-cells { gap: 1px; }
+        .heat-cell { border-radius: 2px; border-width: 0.5px; }
+        .heat-daynum { font-size: 0.5rem; }
+      }
       .heatmap-note { color: var(--dim); font-size: 0.85rem; margin: 0.6rem 0 0.25rem; }
 
       /* ---- Backfill panel ---- */
@@ -649,10 +657,13 @@
           var dd = String(dayNum).padStart(2, "0");
           return year + "-" + m + "-" + dd;
         }
-        // Header row: day numbers (every day, tiny; the row is the map's key)
+        // Header row: day numbers only on 1, 5, 10, 15, 20, 25 and the
+        // last day. A number in every 5-6px cell overflows its cell and
+        // overlaps its neighbours on a phone — that was the mobile break.
         var html = '<div class="heat-row"><span class="heat-label"></span><span class="heat-cells">';
         for (var dn = 1; dn <= daysInMonth; dn++) {
-          html += '<span class="heat-daynum">' + dn + "</span>";
+          var showNum = dn === 1 || dn % 5 === 0 || dn === daysInMonth;
+          html += '<span class="heat-daynum">' + (showNum ? dn : "") + "</span>";
         }
         html += "</span></div>";
         cats.forEach(function (c) {
