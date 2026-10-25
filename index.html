@@ -220,6 +220,9 @@
       .color-swatch { width: 2rem; height: 2rem; border-radius: 50%; border: 2px solid transparent; padding: 0; flex: none; }
       .color-swatch.selected { border-color: var(--text); transform: scale(1.12); }
       .habit-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+      .cat-color-row { display: flex; align-items: center; gap: 0.75rem; margin: 0.35rem 0; }
+      .cat-color-row span { flex: 1; font-size: 0.95rem; }
+      .cat-color-row input[type="color"] { width: 2.5rem; height: 2.5rem; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--surface); flex: none; }
       .device-note { color: var(--dim); font-size: 0.85rem; margin-top: 1.25rem; }
       .empty { text-align: center; color: var(--dim); padding: 2rem 0; font-size: 0.95rem; }
     </style>
@@ -285,6 +288,8 @@
           <datalist id="categoryList"></datalist>
           <label>Color (optional — leave it to follow the category)</label>
           <div class="color-pick" id="colorPick" role="group" aria-label="Habit color"></div>
+          <label>Category colors — tap a color to recolor that whole category</label>
+          <div id="categoryColors"></div>
           <button type="submit" id="addBtn" disabled>Add habit</button>
         </form>
         <p class="device-note">Check-ins sync to a Google Sheet when online, and are also saved on this device as a backup. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
@@ -851,6 +856,7 @@
         renderGraph();
         renderHeatmap();
         renderBackfillPanel();
+        renderCategoryColors();
 
         // Habit groups, preserving list order
         habitList.innerHTML = "";
@@ -1006,6 +1012,38 @@
         render();
       }
 
+      // Recoloring a category sets every habit in it to that color, so
+      // the list dots, graph and heatmap all follow at once.
+      function setCategoryColor(category, color) {
+        state.habits.forEach(function (h) {
+          if ((h.category || "Other") === category) h.color = color;
+        });
+        apiPost({ action: "updateCategoryColor", category: category, color: color });
+        saveState();
+        render();
+      }
+      function renderCategoryColors() {
+        var wrap = document.getElementById("categoryColors");
+        wrap.innerHTML = "";
+        if (!editing) return;
+        categoryOrder().filter(function (c) {
+          return state.habits.some(function (h) { return (h.category || "Other") === c; });
+        }).forEach(function (c) {
+          var row = document.createElement("div");
+          row.className = "cat-color-row";
+          var label = document.createElement("span");
+          label.textContent = c;
+          var input = document.createElement("input");
+          input.type = "color";
+          input.value = categoryColor(c);
+          input.setAttribute("aria-label", "Color for " + c);
+          input.addEventListener("change", function () { setCategoryColor(c, input.value); });
+          row.appendChild(label);
+          row.appendChild(input);
+          wrap.appendChild(row);
+        });
+      }
+
       function moveHabit(id, newCategory) {
         var habit = habitById(id);
         if (!habit || habit.category === newCategory) return;
@@ -1061,7 +1099,8 @@
       var colorPickEl = document.getElementById("colorPick");
       var pickedColor = null; // null = follow the category color
       function renderColorPick() {
-        var def = CATEGORY_COLORS[newCategory.value.trim()] || PALETTE[0];
+        var cat = newCategory.value.trim();
+        var def = (cat && state.habits.some(function (h) { return h.category === cat; })) ? categoryColor(cat) : PALETTE[0];
         var selected = pickedColor || def;
         colorPickEl.innerHTML = "";
         PALETTE.forEach(function (c) {
