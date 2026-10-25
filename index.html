@@ -171,13 +171,14 @@
         <div class="week" id="weekStrip" role="group" aria-label="Pick a day"></div>
       </header>
 
-      <section class="graph-card" aria-label="Total check-ins over time, by category">
+      <section class="graph-card" aria-label="Daily score, by category">
         <div class="graph-total">
           <span class="big font-display" id="totalBig">0</span>
-          <span class="cap">total check-ins, all time</span>
+          <span class="cap" id="totalCap">daily score</span>
         </div>
         <div class="graph-wrap" id="graphWrap"></div>
         <div class="graph-legend" id="graphLegend"></div>
+        <p class="graph-note" id="prayerNote" hidden>All 5 prayers weren't done, so this day's score is 0.</p>
         <p class="graph-note" id="graphNote" hidden>Your first bar appears with your first check below.</p>
       </section>
 
@@ -412,24 +413,40 @@
         var h = habitById(id);
         return h ? (h.category || "Other") : "Other";
       }
-      // Cumulative stacked series: one bar per day from the first check-in
-      // to today. Each bar's height is the cumulative total to that day,
-      // and each segment's height is the cumulative total for its category
-      // to that day — so a category's section grows as you check its habits.
+      // Daily score: 1 point per habit checked that day, but only if all
+      // 5 daily prayers (Fajr, Dhuhr, Asr, Maghrib, Isha) are done. If any
+      // prayer is missing — or a prayer habit no longer exists — the
+      // day's score is 0, no matter what else was checked.
+      var PRAYER_NAMES = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
+      function prayersDone(day) {
+        return PRAYER_NAMES.every(function (name) {
+          var h = habitByName(name);
+          return h && state.checks[day] && state.checks[day][h.id];
+        });
+      }
+      function dayScore(day) {
+        return prayersDone(day) ? dayCount(day) : 0;
+      }
+      // Daily stacked series: one bar per day from the first check-in
+      // to today. Each bar is that day's habits, stacked by category.
+      // A day with all 5 prayers done scores its checked count; a day
+      // without them scores 0 and its bar is shown gray instead.
       function buildSeries() {
         var days = Object.keys(state.checks).filter(function (d) {
           return Object.keys(state.checks[d]).length > 0;
         }).sort();
         var cats = categoryOrder();
+        function emptyCounts() {
+          var counts = {};
+          cats.forEach(function (c) { counts[c] = 0; });
+          return counts;
+        }
         if (days.length === 0) {
-          var empty = {};
-          cats.forEach(function (c) { empty[c] = 0; });
-          return [{ day: today, total: 0, counts: empty }];
+          return [{ day: today, raw: 0, score: 0, prayers: false, counts: emptyCounts() }];
         }
         var byDay = {};
         days.forEach(function (d) {
-          var counts = {};
-          cats.forEach(function (c) { counts[c] = 0; });
+          var counts = emptyCounts();
           Object.keys(state.checks[d]).forEach(function (id) {
             var c = habitCategory(id);
             if (counts[c] === undefined) counts[c] = 0;
@@ -438,18 +455,13 @@
           byDay[d] = counts;
         });
         var end = days[days.length - 1] > today ? days[days.length - 1] : today;
-        var running = {};
-        cats.forEach(function (c) { running[c] = 0; });
         var points = [];
         var cursor = days[0];
         while (cursor <= end) {
-          var dayCounts = byDay[cursor];
-          if (dayCounts) cats.forEach(function (c) { running[c] += dayCounts[c] || 0; });
-          var total = 0;
-          cats.forEach(function (c) { total += running[c]; });
-          var snap = {};
-          cats.forEach(function (c) { snap[c] = running[c]; });
-          points.push({ day: cursor, total: total, counts: snap });
+          var counts = byDay[cursor] || emptyCounts();
+          var raw = 0;
+          cats.forEach(function (c) { raw += counts[c] || 0; });
+          points.push({ day: cursor, raw: raw, score: prayersDone(cursor) ? raw : 0, prayers: prayersDone(cursor), counts: counts });
           cursor = addDays(cursor, 1);
         }
         return points;
@@ -458,15 +470,24 @@
       // ---------- Graph (hand-drawn SVG stacked bars) ----------
       function renderGraph() {
         var wrap = document.getElementById("graphWrap");
-        var total = totalCheckins();
-        document.getElementById("totalBig").textContent = String(total);
-        document.getElementById("graphNote").hidden = total !== 0;
-
         var series = buildSeries();
         var cats = categoryOrder();
+        var selected = null;
+        series.forEach(function (p) { if (p.day === selectedDay) selected = p; });
+        var score = selected ? selected.score : dayScore(selectedDay);
+        var selectedRaw = selected ? selected.raw : dayCount(selectedDay);
+        var selectedPrayers = selected ? selected.prayers : prayersDone(selectedDay);
+        document.getElementById("totalBig").textContent = String(score);
+        document.getElementById("totalCap").textContent = selectedDay === today ? "daily score today" : "daily score · " + shortLabel(selectedDay);
+        document.getElementById("graphNote").hidden = totalCheckins() !== 0;
+        document.getElementById("prayerNote").hidden = !(selectedRaw > 0 && !selectedPrayers);
+
         var W = 640, H = 190, padL = 30, padR = 8, padT = 10, padB = 24;
         var iw = W - padL - padR, ih = H - padT - padB;
-        var maxY = Math.max(1, series[series.length - 1].total);
+        // Bars are drawn at their raw height (so a gray day still shows
+        // the effort), but the score axis is the scored height.
+        var maxY = 1;
+        series.forEach(function (p) { if (p.raw > maxY) maxY = p.raw; });
         var n = series.length;
         var slot = iw / n;
         var bw = Math.max(4, Math.min(28, slot * 0.62));
@@ -491,32 +512,46 @@
         }).join("");
 
         // Stacked bars: bottom segment first, so the first category sits
-        // on the axis and later categories stack on top of it.
-        var bars = series.map(function (p) {
+        // on the axis and later categories stack on top of it. A day
+        // without all 5 prayers is one gray bar instead of colored
+        // segments, and its score is 0 even though the bar shows the
+        // habits that were checked.
+        var bars = series.map(function (p, pi) {
+          if (p.raw === 0) return "";
+          if (!p.prayers) {
+            var yTop = y(p.raw);
+            var h = y(0) - yTop;
+            return '<rect x="' + x(pi) + '" y="' + yTop.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1).toFixed(1) + '" rx="2" style="fill:var(--dim)" opacity="0.55"><title>' + shortLabel(p.day) + " · Score 0 — prayers incomplete (" + p.raw + " checked)</title></rect>";
+          }
           var acc = 0;
           return cats.map(function (c) {
             var v = p.counts[c] || 0;
             if (v === 0) return "";
-            var yTop = y(acc + v);
-            var h = y(acc) - yTop;
+            var yTop2 = y(acc + v);
+            var h2 = y(acc) - yTop2;
             acc += v;
             var color = CATEGORY_COLORS[c] || "var(--dim)";
-            return '<rect x="' + x(series.indexOf(p)) + '" y="' + yTop.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1).toFixed(1) + '" rx="2" fill="' + color + '"><title>' + shortLabel(p.day) + " · " + c + ": " + v + " cumulative</title></rect>";
+            return '<rect x="' + x(pi) + '" y="' + yTop2.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h2, 1).toFixed(1) + '" rx="2" fill="' + color + '"><title>' + shortLabel(p.day) + " · " + c + ": " + v + "</title></rect>";
           }).join("");
         }).join("");
 
         wrap.innerHTML =
-          '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Stacked bar chart of cumulative check-ins by category, now at ' + total + '">' +
+          '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Stacked bar chart of daily scores by category, selected day score ' + score + '">' +
           gridSvg + bars + xSvg +
           "</svg>";
 
-        // Legend: category color + all-time total for that category.
-        var lastCounts = series[series.length - 1].counts;
+        // Legend: the selected day's breakdown. A gray day shows only
+        // the prayers-incomplete note instead of category colors.
         var legend = document.getElementById("graphLegend");
-        legend.innerHTML = cats.filter(function (c) { return (lastCounts[c] || 0) > 0; }).map(function (c) {
-          var color = CATEGORY_COLORS[c] || "var(--dim)";
-          return '<span class="leg"><span class="sw" style="background:' + color + '"></span>' + c + " · " + (lastCounts[c] || 0) + "</span>";
-        }).join("");
+        if (selectedRaw > 0 && !selectedPrayers) {
+          legend.innerHTML = '<span class="leg"><span class="sw" style="background:var(--dim)"></span>Prayers incomplete · score 0</span>';
+        } else {
+          var selCounts = selected ? selected.counts : {};
+          legend.innerHTML = cats.filter(function (c) { return (selCounts[c] || 0) > 0; }).map(function (c) {
+            var color = CATEGORY_COLORS[c] || "var(--dim)";
+            return '<span class="leg"><span class="sw" style="background:' + color + '"></span>' + c + " · " + (selCounts[c] || 0) + "</span>";
+          }).join("");
+        }
       }
 
       // ---------- Rendering ----------
