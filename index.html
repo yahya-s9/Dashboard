@@ -122,22 +122,20 @@
         border-radius: var(--radius); overflow: hidden;
       }
       .heatmap-card h2 { font-size: 0.85rem; font-weight: 700; margin: 0 0 0.6rem; }
-      .heatmap { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-      .heat-row { display: flex; gap: 2px; align-items: center; min-width: 0; }
-      .heat-label { flex: 0 0 88px; min-width: 0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .heat-cells { flex: 1; display: flex; gap: 2px; min-width: 0; }
+      /* Scroll instead of squeeze: the grid is wide enough for readable,
+         tappable cells, and the card scrolls sideways on a phone. */
+      .heatmap-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+      .heatmap { display: flex; flex-direction: column; gap: 3px; min-width: 580px; }
+      .heat-row { display: flex; gap: 3px; align-items: center; }
+      .heat-label {
+        flex: 0 0 88px; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        position: sticky; left: 0; background: var(--surface); z-index: 1; padding-right: 6px;
+      }
+      .heat-cells { flex: 1; display: flex; gap: 3px; min-width: 0; }
       .heat-cell { flex: 1 1 0; min-width: 0; aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--border); padding: 0; }
       .heat-cell.future { background: transparent; opacity: 0.35; }
       .heat-cell.today { outline: 1.5px solid var(--accent); outline-offset: 0; }
-      .heat-daynum { flex: 1 1 0; min-width: 0; overflow: hidden; text-align: center; font-size: 0.55rem; color: var(--dim); line-height: 1; }
-      @media (max-width: 520px) {
-        .heatmap-card { padding: 0.75rem 0.5rem; }
-        .heat-row { gap: 1px; }
-        .heat-label { flex-basis: 62px; font-size: 0.72rem; }
-        .heat-cells { gap: 1px; }
-        .heat-cell { border-radius: 2px; border-width: 0.5px; }
-        .heat-daynum { font-size: 0.5rem; }
-      }
+      .heat-daynum { flex: 1 1 0; min-width: 0; overflow: hidden; text-align: center; font-size: 0.6rem; color: var(--dim); line-height: 1; }
       .heatmap-note { color: var(--dim); font-size: 0.85rem; margin: 0.6rem 0 0.25rem; }
 
       /* ---- Backfill panel ---- */
@@ -243,8 +241,8 @@
 
       <section class="heatmap-card" aria-label="Monthly heatmap by category">
         <h2 id="heatmapTitle">This month</h2>
-        <div class="heatmap" id="heatmap"></div>
-        <p class="heatmap-note">Darker = more of that category done that day. Tap a day to open it.</p>
+        <div class="heatmap-scroll"><div class="heatmap" id="heatmap"></div></div>
+        <p class="heatmap-note">Scroll sideways to see the whole month. Darker = more of that category done that day. Tap a day to open it.</p>
       </section>
 
       <section class="backfill-card" id="backfillPanel" hidden aria-label="Backfill a habit">
@@ -657,13 +655,11 @@
           var dd = String(dayNum).padStart(2, "0");
           return year + "-" + m + "-" + dd;
         }
-        // Header row: day numbers only on 1, 5, 10, 15, 20, 25 and the
-        // last day. A number in every 5-6px cell overflows its cell and
-        // overlaps its neighbours on a phone — that was the mobile break.
+        // Header row: every day number again — with the grid scrolling
+        // at a readable cell size, a number fits inside its cell.
         var html = '<div class="heat-row"><span class="heat-label"></span><span class="heat-cells">';
         for (var dn = 1; dn <= daysInMonth; dn++) {
-          var showNum = dn === 1 || dn % 5 === 0 || dn === daysInMonth;
-          html += '<span class="heat-daynum">' + (showNum ? dn : "") + "</span>";
+          html += '<span class="heat-daynum">' + dn + "</span>";
         }
         html += "</span></div>";
         cats.forEach(function (c) {
