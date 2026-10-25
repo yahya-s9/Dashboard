@@ -180,6 +180,8 @@
       <section id="habitList" aria-label="Habits"></section>
 
       <footer>
+        <button type="button" class="edit-toggle" id="syncBtn">Sync now</button>
+        <p class="device-note" id="syncNote">Sync: not yet checked.</p>
         <button type="button" class="edit-toggle" id="editToggle" aria-expanded="false">Edit habits</button>
         <form class="add" id="addForm" hidden>
           <label for="newName">New habit</label>
@@ -189,7 +191,7 @@
           <datalist id="categoryList"></datalist>
           <button type="submit" id="addBtn" disabled>Add habit</button>
         </form>
-        <p class="device-note">Check-ins are saved on this device, in this browser. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
+        <p class="device-note">Check-ins sync to a Google Sheet when online, and are also saved on this device as a backup. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
       </footer>
     </main>
 
@@ -265,6 +267,57 @@
         } catch (e) { /* storage full or blocked: keep working in-memory */ }
       }
       saveState(); // persist the seed on first open
+
+      // ---------- Google Sheet sync (source of truth when online) ----------
+      var API_URL = "https://script.google.com/macros/s/AKfycbxH2QFD5hvz-bfzABi2Hsa1SMa05hW984OPcPyCLXUsv4mo_W4wDkgCBVwBhmLj7VZN3A/exec";
+      function setSyncNote(text) {
+        var el = document.getElementById("syncNote");
+        if (el) el.textContent = "Sync: " + text;
+      }
+      function habitById(id) {
+        for (var i = 0; i < state.habits.length; i++) if (state.habits[i].id === id) return state.habits[i];
+        return null;
+      }
+      function habitByName(name) {
+        for (var i = 0; i < state.habits.length; i++) if (state.habits[i].name === name) return state.habits[i];
+        return null;
+      }
+      function apiPost(body) {
+        // text/plain keeps this a simple request (no CORS preflight); the
+        // response is not readable in no-cors mode, so this is fire-and-forget.
+        try {
+          fetch(API_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(body)
+          }).catch(function () {});
+        } catch (e) {}
+      }
+      function syncFromSheet() {
+        setSyncNote("syncing…");
+        return fetch(API_URL).then(function (r) { return r.json(); }).then(function (data) {
+          if (!data || !data.ok || !Array.isArray(data.habits)) throw new Error("bad sync response");
+          var newHabits = data.habits.map(function (h) {
+            return { id: nextId(), name: h.name, category: h.category || null };
+          });
+          var newChecks = {};
+          (data.checkins || []).forEach(function (c) {
+            var h = null;
+            newHabits.forEach(function (x) { if (x.name === c.habit) h = x; });
+            if (!h) return;
+            if (!newChecks[c.date]) newChecks[c.date] = {};
+            newChecks[c.date][h.id] = true;
+          });
+          state.habits = newHabits;
+          state.checks = newChecks;
+          saveState();
+          setSyncNote("synced with Google Sheet");
+          render();
+        }).catch(function () {
+          setSyncNote("offline — saved on this device only");
+        });
+      }
 
       // ---------- Date helpers ----------
       function toDayStr(d) {
@@ -548,18 +601,22 @@
 
       // ---------- Actions ----------
       function toggleHabit(id) {
+        var habit = habitById(id);
         if (!state.checks[selectedDay]) state.checks[selectedDay] = {};
         if (state.checks[selectedDay][id]) {
           delete state.checks[selectedDay][id];
           if (Object.keys(state.checks[selectedDay]).length === 0) delete state.checks[selectedDay];
+          if (habit) apiPost({ action: "uncheck", date: selectedDay, habit: habit.name });
         } else {
           state.checks[selectedDay][id] = true;
+          if (habit) apiPost({ action: "check", date: selectedDay, habit: habit.name, category: habit.category || "" });
         }
         saveState();
         render();
       }
 
       function deleteHabit(id) {
+        var habit = habitById(id);
         state.habits = state.habits.filter(function (h) { return h.id !== id; });
         for (var day in state.checks) {
           if (state.checks[day][id]) {
@@ -567,6 +624,7 @@
             if (Object.keys(state.checks[day]).length === 0) delete state.checks[day];
           }
         }
+        if (habit) apiPost({ action: "removeHabit", name: habit.name });
         saveState();
         render();
       }
@@ -599,11 +657,15 @@
         newName.value = "";
         newCategory.value = "";
         addBtn.disabled = true;
+        apiPost({ action: "addHabit", name: name, category: category });
         saveState();
         render();
       });
 
+      document.getElementById("syncBtn").addEventListener("click", function () { syncFromSheet(); });
+
       render();
+      syncFromSheet();
     </script>
   </body>
 </html>
