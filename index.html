@@ -70,8 +70,14 @@
       }
 
       /* ---- Day header ---- */
-      .day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
-      .day-head h1 { font-size: 1.65rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+      .day-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+      .day-head h1 { flex: 1; font-size: 1.65rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+      .day-nav {
+        flex: none; width: 2.25rem; height: 2.25rem; border-radius: 50%;
+        background: var(--surface); border: 1px solid var(--border); color: var(--text);
+        display: flex; align-items: center; justify-content: center; font-size: 1.25rem; line-height: 1;
+      }
+      .day-nav:disabled { opacity: 0.35; cursor: default; }
       .back-today {
         background: none; border: none; padding: 0.25rem 0;
         color: var(--accent); font-weight: 600; font-size: 0.9rem; white-space: nowrap;
@@ -181,7 +187,9 @@
     <main>
       <header>
         <div class="day-head">
+          <button type="button" class="day-nav" id="prevDay" aria-label="Previous day">‹</button>
           <h1 class="font-display" id="dayTitle">Today</h1>
+          <button type="button" class="day-nav" id="nextDay" aria-label="Next day">›</button>
           <button type="button" class="back-today" id="backToday" hidden>Back to today</button>
         </div>
         <p class="day-sub" id="daySub"></p>
@@ -653,6 +661,7 @@
         // Header
         document.getElementById("dayTitle").textContent = longLabel(selectedDay, today);
         document.getElementById("backToday").hidden = selectedDay === today;
+        document.getElementById("nextDay").disabled = selectedDay === today;
         var doneToday = state.habits.filter(function (h) {
           return state.checks[selectedDay] && state.checks[selectedDay][h.id];
         }).length;
@@ -822,6 +831,17 @@
       document.getElementById("backToday").addEventListener("click", function () {
         selectedDay = toDayStr(new Date());
         render();
+      });
+
+      document.getElementById("prevDay").addEventListener("click", function () {
+        selectedDay = addDays(selectedDay, -1);
+        render();
+      });
+      document.getElementById("nextDay").addEventListener("click", function () {
+        if (selectedDay < today) {
+          selectedDay = addDays(selectedDay, 1);
+          render();
+        }
       });
 
       var editToggle = document.getElementById("editToggle");
