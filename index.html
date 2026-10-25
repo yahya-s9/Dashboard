@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Habits" />
+    <link rel="icon" href="data:," />
+    <title>Daily Habit Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&family=Public+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f7f4ee;
+        --surface: #fffdf9;
+        --surface-2: #efe9dd;
+        --text: #1c1a16;
+        --dim: #6f6a5e;
+        --border: #ddd5c6;
+        --accent: #1e7a4f;
+        --accent-soft: #dcefe3;
+        --accent-ink: #ffffff;
+        --amber: #b45309;
+        --radius: 14px;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14161a;
+          --surface: #1e2126;
+          --surface-2: #262a31;
+          --text: #ece9e2;
+          --dim: #9b978c;
+          --border: #33373f;
+          --accent: #4cc38a;
+          --accent-soft: #1d3328;
+          --accent-ink: #0d1512;
+          --amber: #f0b35e;
+          color-scheme: dark;
+        }
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Public Sans", system-ui, -apple-system, sans-serif;
+        font-size: 16px;
+        line-height: 1.45;
+      }
+      .font-display { font-family: "Newsreader", Georgia, serif; }
+      main {
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 1.25rem 1rem 2.5rem;
+      }
+      button { font: inherit; cursor: pointer; }
+      button:focus-visible, input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      /* ---- Day header ---- */
+      .day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+      .day-head h1 { font-size: 1.65rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+      .back-today {
+        background: none; border: none; padding: 0.25rem 0;
+        color: var(--accent); font-weight: 600; font-size: 0.9rem; white-space: nowrap;
+      }
+      .day-sub { color: var(--dim); font-size: 0.9rem; margin: 0.25rem 0 0; }
+
+      /* ---- Week strip ---- */
+      .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.25rem; margin-top: 1rem; }
+      .week button {
+        display: flex; flex-direction: column; align-items: center;
+        padding: 0.5rem 0 0.45rem; border: none; border-radius: var(--radius);
+        background: transparent; color: var(--text);
+      }
+      .week button:hover { background: var(--surface-2); }
+      .week button.selected { background: var(--accent-soft); }
+      .week .dow { font-size: 0.7rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
+      .week .dnum { font-family: "Newsreader", Georgia, serif; font-size: 1.15rem; line-height: 1.5; }
+      .week button.selected .dnum { font-weight: 700; color: var(--accent); }
+      .week .dot { width: 6px; height: 6px; border-radius: 50%; background: transparent; margin-top: 2px; }
+      .week .dot.on { background: var(--accent); }
+
+      /* ---- Graph card ---- */
+      .graph-card {
+        margin-top: 1.1rem; padding: 1rem 1rem 0.75rem;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      .graph-total { display: flex; align-items: baseline; gap: 0.75rem; }
+      .graph-total .big { font-size: 3.2rem; font-weight: 600; line-height: 1; }
+      .graph-total .cap { color: var(--dim); font-size: 0.9rem; }
+      .graph-wrap { margin-top: 0.75rem; }
+      .graph-wrap svg { display: block; width: 100%; height: auto; }
+      .graph-note { color: var(--dim); font-size: 0.9rem; margin: 0.35rem 0 0.25rem; }
+
+      /* ---- Habit list ---- */
+      .group { margin-top: 1.4rem; }
+      .group h2 {
+        font-size: 0.85rem; font-weight: 700; margin: 0 0 0.5rem;
+        display: flex; align-items: center; gap: 0.5rem; color: var(--text);
+      }
+      .group h2 .swatch { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+      .group h2 .count { color: var(--dim); font-weight: 500; font-size: 0.8rem; }
+      ul.habits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+      .habit-row { display: flex; align-items: stretch; gap: 0.5rem; }
+      .habit-btn {
+        flex: 1; display: flex; align-items: center; gap: 0.75rem;
+        min-height: 3.5rem; padding: 0.6rem 0.8rem; text-align: left;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); color: var(--text);
+      }
+      .habit-btn.checked { border-color: var(--accent); background: var(--accent-soft); }
+      .box {
+        flex: none; width: 28px; height: 28px; border-radius: 8px;
+        border: 2px solid var(--dim); color: transparent;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem; font-weight: 700; line-height: 1;
+      }
+      .habit-btn.checked .box { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+      .habit-name { flex: 1; font-size: 1rem; }
+      .habit-btn.checked .habit-name { color: var(--dim); text-decoration: line-through; text-decoration-color: var(--accent); }
+      .habit-meta { flex: none; font-size: 0.85rem; color: var(--dim); }
+      .habit-meta.streak { color: var(--amber); font-weight: 600; }
+      .del-btn {
+        flex: none; border: 1px solid var(--border); background: var(--surface);
+        border-radius: var(--radius); padding: 0 0.8rem; font-size: 1.15rem; color: var(--dim);
+      }
+
+      /* ---- Footer / edit ---- */
+      footer { margin-top: 1.75rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+      .edit-toggle { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; font-size: 0.95rem; }
+      form.add { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.9rem; }
+      form.add label { font-size: 0.88rem; color: var(--dim); margin-top: 0.35rem; }
+      form.add input {
+        min-height: 2.75rem; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface); color: var(--text); padding: 0 0.8rem; font: inherit;
+      }
+      form.add button[type="submit"] {
+        min-height: 2.75rem; margin-top: 0.6rem; border: none; border-radius: var(--radius);
+        background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 1rem;
+      }
+      form.add button[type="submit"]:disabled { opacity: 0.4; cursor: default; }
+      .device-note { color: var(--dim); font-size: 0.85rem; margin-top: 1.25rem; }
+      .empty { text-align: center; color: var(--dim); padding: 2rem 0; font-size: 0.95rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="day-head">
+          <h1 class="font-display" id="dayTitle">Today</h1>
+          <button type="button" class="back-today" id="backToday" hidden>Back to today</button>
+        </div>
+        <p class="day-sub" id="daySub"></p>
+        <div class="week" id="weekStrip" role="group" aria-label="Pick a day"></div>
+      </header>
+
+      <section class="graph-card" aria-label="Total check-ins over time">
+        <div class="graph-total">
+          <span class="big font-display" id="totalBig">0</span>
+          <span class="cap">total check-ins, all time</span>
+        </div>
+        <div class="graph-wrap" id="graphWrap"></div>
+        <p class="graph-note" id="graphNote" hidden>Your line starts with the first check below.</p>
+      </section>
+
+      <section id="habitList" aria-label="Habits"></section>
+
+      <footer>
+        <button type="button" class="edit-toggle" id="editToggle" aria-expanded="false">Edit habits</button>
+        <form class="add" id="addForm" hidden>
+          <label for="newName">New habit</label>
+          <input id="newName" type="text" placeholder="e.g. Read 10 pages" autocomplete="off" />
+          <label for="newCategory">Category (optional)</label>
+          <input id="newCategory" type="text" placeholder="e.g. Health" list="categoryList" autocomplete="off" />
+          <datalist id="categoryList"></datalist>
+          <button type="submit" id="addBtn" disabled>Add habit</button>
+        </form>
+        <p class="device-note">Check-ins are saved on this device, in this browser. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
+      </footer>
+    </main>
+
+    <script>
+      "use strict";
+
+      // ---------- Habit list (from your goals grid) ----------
+      var SEED_HABITS = [
+        { name: "Memorize 1 page", category: "Islam" },
+        { name: "Fajr", category: "Islam" },
+        { name: "Dhuhr", category: "Islam" },
+        { name: "Asr", category: "Islam" },
+        { name: "Maghrib", category: "Islam" },
+        { name: "Isha", category: "Islam" },
+        { name: "Qadha (2x each prayer)", category: "Islam" },
+        { name: "Document wins", category: "Professional" },
+        { name: "1 LeetCode", category: "Professional" },
+        { name: "1 system design", category: "Professional" },
+        { name: "15 min learning", category: "Academic" },
+        { name: "Ship something", category: "Entrepreneurship" },
+        { name: "Give $1", category: "Finances" },
+        { name: "Call family", category: "Relationships" },
+        { name: "Sleep / wake early", category: "Health" },
+        { name: "Caloric deficit", category: "Health" },
+        { name: "Only water / coffee", category: "Health" },
+        { name: "30 min workout", category: "Health" }
+      ];
+
+      var CATEGORY_COLORS = {
+        "Islam": "#2fbf71",
+        "Professional": "#8b5cf6",
+        "Academic": "#3b82f6",
+        "Entrepreneurship": "#06b6d4",
+        "Finances": "#ef4444",
+        "Relationships": "#ec4899",
+        "Behaviors": "#f97316",
+        "Health": "#eab308"
+      };
+
+      // ---------- Storage (this device only) ----------
+      var STORE_KEY = "daily-habit-tracker-v1";
+      var uid = 0;
+      function nextId() { uid += 1; return "h" + Date.now().toString(36) + uid; }
+
+      function seedState() {
+        return {
+          habits: SEED_HABITS.map(function (h) {
+            return { id: nextId(), name: h.name, category: h.category };
+          }),
+          checks: {} // { "YYYY-MM-DD": { habitId: true } }
+        };
+      }
+
+      function loadState() {
+        try {
+          var raw = localStorage.getItem(STORE_KEY);
+          if (!raw) return seedState();
+          var parsed = JSON.parse(raw);
+          if (!parsed || !Array.isArray(parsed.habits) || typeof parsed.checks !== "object" || parsed.checks === null) {
+            return seedState();
+          }
+          return parsed;
+        } catch (e) {
+          return seedState();
+        }
+      }
+
+      var state = loadState();
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORE_KEY, JSON.stringify(state));
+        } catch (e) { /* storage full or blocked: keep working in-memory */ }
+      }
+      saveState(); // persist the seed on first open
+
+      // ---------- Date helpers ----------
+      function toDayStr(d) {
+        var m = String(d.getMonth() + 1).padStart(2, "0");
+        var dd = String(d.getDate()).padStart(2, "0");
+        return d.getFullYear() + "-" + m + "-" + dd;
+      }
+      function parseDay(day) {
+        var p = day.split("-").map(Number);
+        return new Date(p[0], p[1] - 1, p[2]);
+      }
+      function addDays(day, n) {
+        var dt = parseDay(day);
+        dt.setDate(dt.getDate() + n);
+        return toDayStr(dt);
+      }
+      function shortLabel(day) {
+        return parseDay(day).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      }
+      function longLabel(day, today) {
+        if (day === today) return "Today";
+        if (day === addDays(today, -1)) return "Yesterday";
+        return parseDay(day).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+      }
+
+      var today = toDayStr(new Date());
+      var selectedDay = today;
+      var editing = false;
+
+      // ---------- Derived data ----------
+      function dayCount(day) {
+        var c = state.checks[day];
+        return c ? Object.keys(c).length : 0;
+      }
+      function totalCheckins() {
+        var n = 0;
+        for (var day in state.checks) n += Object.keys(state.checks[day]).length;
+        return n;
+      }
+      function habitTotal(id) {
+        var n = 0;
+        for (var day in state.checks) if (state.checks[day][id]) n += 1;
+        return n;
+      }
+      function currentStreak(id) {
+        var cursor = today;
+        if (!(state.checks[cursor] && state.checks[cursor][id])) cursor = addDays(cursor, -1);
+        var streak = 0;
+        while (state.checks[cursor] && state.checks[cursor][id]) {
+          streak += 1;
+          cursor = addDays(cursor, -1);
+        }
+        return streak;
+      }
+      // Cumulative series: one point per day from first check-in to today.
+      function buildSeries() {
+        var days = Object.keys(state.checks).filter(function (d) {
+          return Object.keys(state.checks[d]).length > 0;
+        }).sort();
+        var points = [];
+        if (days.length === 0) {
+          return [{ day: today, total: 0 }];
+        }
+        var byDay = {};
+        days.forEach(function (d) { byDay[d] = Object.keys(state.checks[d]).length; });
+        var end = days[days.length - 1] > today ? days[days.length - 1] : today;
+        var running = 0;
+        var cursor = days[0];
+        while (cursor <= end) {
+          running += byDay[cursor] || 0;
+          points.push({ day: cursor, total: running });
+          cursor = addDays(cursor, 1);
+        }
+        return points;
+      }
+
+      // ---------- Graph (hand-drawn SVG) ----------
+      function renderGraph() {
+        var wrap = document.getElementById("graphWrap");
+        var total = totalCheckins();
+        document.getElementById("totalBig").textContent = String(total);
+        document.getElementById("graphNote").hidden = total !== 0;
+
+        var series = buildSeries();
+        var W = 640, H = 190, padL = 30, padR = 8, padT = 10, padB = 24;
+        var iw = W - padL - padR, ih = H - padT - padB;
+        var maxY = Math.max(1, series[series.length - 1].total);
+        var n = series.length;
+        function x(i) { return padL + (n === 1 ? iw / 2 : (i / (n - 1)) * iw); }
+        function y(v) { return padT + ih - (v / maxY) * ih; }
+
+        var line = series.map(function (p, i) {
+          return (i === 0 ? "M" : "L") + x(i).toFixed(1) + "," + y(p.total).toFixed(1);
+        }).join(" ");
+        var area = line + " L" + x(n - 1).toFixed(1) + "," + (padT + ih) + " L" + x(0).toFixed(1) + "," + (padT + ih) + " Z";
+
+        // Y ticks: 0, mid, max
+        var yTicks = [0, Math.round(maxY / 2), maxY].filter(function (v, i, a) { return a.indexOf(v) === i; });
+        var gridSvg = yTicks.map(function (v) {
+          return '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/>' +
+            '<text x="' + (padL - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="11" fill="var(--dim)">' + v + "</text>";
+        }).join("");
+
+        // X ticks: first, middle(s), last — at most 4 labels
+        var idxSet = {};
+        [0, Math.floor((n - 1) / 3), Math.floor((2 * (n - 1)) / 3), n - 1].forEach(function (i) { idxSet[i] = true; });
+        var xSvg = Object.keys(idxSet).map(function (k) {
+          var i = Number(k);
+          var anchor = i === 0 ? "start" : (i === n - 1 ? "end" : "middle");
+          return '<text x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="' + anchor + '" font-size="11" fill="var(--dim)">' + shortLabel(series[i].day) + "</text>";
+        }).join("");
+
+        var dots = "";
+        if (n <= 14) {
+          dots = series.map(function (p, i) {
+            return '<circle cx="' + x(i) + '" cy="' + y(p.total) + '" r="3" fill="var(--accent)"><title>' + shortLabel(p.day) + ": " + p.total + " total</title></circle>";
+          }).join("");
+        } else {
+          var last = series[n - 1];
+          dots = '<circle cx="' + x(n - 1) + '" cy="' + y(last.total) + '" r="3.5" fill="var(--accent)"><title>' + shortLabel(last.day) + ": " + last.total + " total</title></circle>";
+        }
+
+        wrap.innerHTML =
+          '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Line graph of cumulative check-ins, now at ' + total + '">' +
+          '<defs><linearGradient id="climb" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%" stop-color="var(--accent)" stop-opacity="0.32"/>' +
+          '<stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>' +
+          "</linearGradient></defs>" +
+          gridSvg +
+          '<path d="' + area + '" fill="url(#climb)"/>' +
+          '<path d="' + line + '" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+          dots + xSvg +
+          "</svg>";
+      }
+
+      // ---------- Rendering ----------
+      var weekStrip = document.getElementById("weekStrip");
+      var habitList = document.getElementById("habitList");
+
+      function render() {
+        today = toDayStr(new Date());
+        if (selectedDay > today) selectedDay = today;
+
+        // Header
+        document.getElementById("dayTitle").textContent = longLabel(selectedDay, today);
+        document.getElementById("backToday").hidden = selectedDay === today;
+        var doneToday = state.habits.filter(function (h) {
+          return state.checks[selectedDay] && state.checks[selectedDay][h.id];
+        }).length;
+        var sub = parseDay(selectedDay).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+        if (state.habits.length > 0) sub += " · " + doneToday + " of " + state.habits.length + " done";
+        document.getElementById("daySub").textContent = sub;
+
+        // Week strip
+        weekStrip.innerHTML = "";
+        for (var i = 6; i >= 0; i--) {
+          (function (day) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            if (day === selectedDay) btn.className = "selected";
+            btn.setAttribute("aria-pressed", day === selectedDay ? "true" : "false");
+            btn.setAttribute("aria-label", longLabel(day, today) + ", " + dayCount(day) + " check-ins");
+            var dow = document.createElement("span");
+            dow.className = "dow";
+            dow.textContent = parseDay(day).toLocaleDateString(undefined, { weekday: "narrow" });
+            var dnum = document.createElement("span");
+            dnum.className = "dnum";
+            dnum.textContent = String(parseDay(day).getDate());
+            var dot = document.createElement("span");
+            dot.className = "dot" + (dayCount(day) > 0 ? " on" : "");
+            btn.appendChild(dow); btn.appendChild(dnum); btn.appendChild(dot);
+            btn.addEventListener("click", function () { selectedDay = day; render(); });
+            weekStrip.appendChild(btn);
+          })(addDays(today, -i));
+        }
+
+        renderGraph();
+
+        // Habit groups, preserving list order
+        habitList.innerHTML = "";
+        if (state.habits.length === 0) {
+          var empty = document.createElement("p");
+          empty.className = "empty";
+          empty.textContent = "No habits yet. Add your first one below.";
+          habitList.appendChild(empty);
+        }
+        var groups = [];
+        state.habits.forEach(function (h) {
+          var g = null;
+          groups.forEach(function (x) { if (x.category === h.category) g = x; });
+          if (!g) { g = { category: h.category, items: [] }; groups.push(g); }
+          g.items.push(h);
+        });
+
+        groups.forEach(function (group) {
+          var wrapDiv = document.createElement("div");
+          wrapDiv.className = "group";
+          if (group.category) {
+            var h2 = document.createElement("h2");
+            var sw = document.createElement("span");
+            sw.className = "swatch";
+            sw.style.background = CATEGORY_COLORS[group.category] || "var(--dim)";
+            h2.appendChild(sw);
+            h2.appendChild(document.createTextNode(group.category));
+            var doneInGroup = group.items.filter(function (h) {
+              return state.checks[selectedDay] && state.checks[selectedDay][h.id];
+            }).length;
+            var cnt = document.createElement("span");
+            cnt.className = "count";
+            cnt.textContent = doneInGroup + "/" + group.items.length;
+            h2.appendChild(cnt);
+            wrapDiv.appendChild(h2);
+          }
+          var ul = document.createElement("ul");
+          ul.className = "habits";
+          group.items.forEach(function (habit) {
+            var checked = !!(state.checks[selectedDay] && state.checks[selectedDay][habit.id]);
+            var li = document.createElement("li");
+            li.className = "habit-row";
+
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "habit-btn" + (checked ? " checked" : "");
+            btn.setAttribute("aria-pressed", checked ? "true" : "false");
+            btn.setAttribute("aria-label", (checked ? "Mark " : "Mark ") + habit.name + (checked ? " not done" : " done"));
+
+            var box = document.createElement("span");
+            box.className = "box";
+            box.setAttribute("aria-hidden", "true");
+            box.textContent = "✓";
+            btn.appendChild(box);
+
+            var name = document.createElement("span");
+            name.className = "habit-name";
+            name.textContent = habit.name;
+            btn.appendChild(name);
+
+            var streak = currentStreak(habit.id);
+            var total = habitTotal(habit.id);
+            if (streak >= 2) {
+              var m = document.createElement("span");
+              m.className = "habit-meta streak";
+              m.textContent = streak + " day streak";
+              btn.appendChild(m);
+            } else if (total > 0) {
+              var m2 = document.createElement("span");
+              m2.className = "habit-meta";
+              m2.textContent = total + " total";
+              btn.appendChild(m2);
+            }
+
+            btn.addEventListener("click", function () { toggleHabit(habit.id); });
+            li.appendChild(btn);
+
+            if (editing) {
+              var del = document.createElement("button");
+              del.type = "button";
+              del.className = "del-btn";
+              del.textContent = "×";
+              del.setAttribute("aria-label", "Remove habit " + habit.name);
+              del.addEventListener("click", function () { deleteHabit(habit.id); });
+              li.appendChild(del);
+            }
+            ul.appendChild(li);
+          });
+          wrapDiv.appendChild(ul);
+          habitList.appendChild(wrapDiv);
+        });
+
+        // Category datalist
+        var dl = document.getElementById("categoryList");
+        dl.innerHTML = "";
+        var cats = [];
+        state.habits.forEach(function (h) { if (h.category && cats.indexOf(h.category) === -1) cats.push(h.category); });
+        cats.forEach(function (c) {
+          var opt = document.createElement("option");
+          opt.value = c;
+          dl.appendChild(opt);
+        });
+      }
+
+      // ---------- Actions ----------
+      function toggleHabit(id) {
+        if (!state.checks[selectedDay]) state.checks[selectedDay] = {};
+        if (state.checks[selectedDay][id]) {
+          delete state.checks[selectedDay][id];
+          if (Object.keys(state.checks[selectedDay]).length === 0) delete state.checks[selectedDay];
+        } else {
+          state.checks[selectedDay][id] = true;
+        }
+        saveState();
+        render();
+      }
+
+      function deleteHabit(id) {
+        state.habits = state.habits.filter(function (h) { return h.id !== id; });
+        for (var day in state.checks) {
+          if (state.checks[day][id]) {
+            delete state.checks[day][id];
+            if (Object.keys(state.checks[day]).length === 0) delete state.checks[day];
+          }
+        }
+        saveState();
+        render();
+      }
+
+      document.getElementById("backToday").addEventListener("click", function () {
+        selectedDay = toDayStr(new Date());
+        render();
+      });
+
+      var editToggle = document.getElementById("editToggle");
+      var addForm = document.getElementById("addForm");
+      editToggle.addEventListener("click", function () {
+        editing = !editing;
+        editToggle.textContent = editing ? "Done editing" : "Edit habits";
+        editToggle.setAttribute("aria-expanded", editing ? "true" : "false");
+        addForm.hidden = !editing;
+        render();
+      });
+
+      var newName = document.getElementById("newName");
+      var newCategory = document.getElementById("newCategory");
+      var addBtn = document.getElementById("addBtn");
+      newName.addEventListener("input", function () { addBtn.disabled = !newName.value.trim(); });
+      addForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var name = newName.value.trim();
+        if (!name) return;
+        var category = newCategory.value.trim();
+        state.habits.push({ id: nextId(), name: name, category: category || null });
+        newName.value = "";
+        newCategory.value = "";
+        addBtn.disabled = true;
+        saveState();
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
