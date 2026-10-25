@@ -196,6 +196,11 @@
         flex: none; border: 1px solid var(--border); background: var(--surface);
         border-radius: var(--radius); padding: 0 0.8rem; font-size: 1.15rem; color: var(--dim);
       }
+      .move-select {
+        flex: none; max-width: 7.5rem; min-height: 3.5rem; border: 1px solid var(--border);
+        border-radius: var(--radius); background: var(--surface); color: var(--text);
+        padding: 0 0.4rem; font: inherit; font-size: 0.85rem;
+      }
 
       /* ---- Footer / edit ---- */
       footer { margin-top: 1.75rem; border-top: 1px solid var(--border); padding-top: 1rem; }
@@ -930,6 +935,35 @@
             li.appendChild(btn);
 
             if (editing) {
+              // Move, don't delete-and-re-add: the habit keeps its id, so
+              // its checks, streak and totals move with it to the new category.
+              var moveSel = document.createElement("select");
+              moveSel.className = "move-select";
+              moveSel.setAttribute("aria-label", "Move " + habit.name + " to category");
+              var cats = [];
+              state.habits.forEach(function (h) { if (h.category && cats.indexOf(h.category) === -1) cats.push(h.category); });
+              cats.forEach(function (c) {
+                var opt = document.createElement("option");
+                opt.value = c;
+                opt.textContent = c;
+                if (c === habit.category) opt.selected = true;
+                moveSel.appendChild(opt);
+              });
+              var newOpt = document.createElement("option");
+              newOpt.value = "__new__";
+              newOpt.textContent = "+ New category";
+              moveSel.appendChild(newOpt);
+              moveSel.addEventListener("change", function () {
+                var val = moveSel.value;
+                if (val === "__new__") {
+                  var name = window.prompt("New category name for " + habit.name + ":");
+                  if (!name || !name.trim()) { moveSel.value = habit.category || cats[0] || ""; return; }
+                  val = name.trim();
+                }
+                moveHabit(habit.id, val);
+              });
+              li.appendChild(moveSel);
+
               var del = document.createElement("button");
               del.type = "button";
               del.className = "del-btn";
@@ -968,6 +1002,15 @@
           state.checks[selectedDay][id] = true;
           if (habit) apiPost({ action: "check", date: selectedDay, habit: habit.name, category: habit.category || "" });
         }
+        saveState();
+        render();
+      }
+
+      function moveHabit(id, newCategory) {
+        var habit = habitById(id);
+        if (!habit || habit.category === newCategory) return;
+        habit.category = newCategory;
+        if (habit) apiPost({ action: "updateHabit", name: habit.name, category: newCategory });
         saveState();
         render();
       }
