@@ -78,6 +78,10 @@
         display: flex; align-items: center; justify-content: center; font-size: 1.25rem; line-height: 1;
       }
       .day-nav:disabled { opacity: 0.35; cursor: default; }
+
+      /* ---- Category viewer: one category at a time ---- */
+      .cat-viewer { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.25rem; }
+      .cat-viewer h2 { flex: 1; text-align: center; font-size: 1.65rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
       .back-today {
         background: none; border: none; padding: 0.25rem 0;
         color: var(--accent); font-weight: 600; font-size: 0.9rem; white-space: nowrap;
@@ -368,6 +372,13 @@
           <button type="button" class="modal-delete" id="modalDelete">Delete habit</button>
         </div>
       </div>
+
+      <div class="cat-viewer" role="group" aria-label="Category">
+        <button type="button" class="day-nav" id="catPrev" aria-label="Previous category">‹</button>
+        <h2 id="catName"></h2>
+        <button type="button" class="day-nav" id="catNext" aria-label="Next category">›</button>
+      </div>
+      <p class="cat-count" id="catCount" style="text-align:center;color:var(--dim);font-size:0.85rem;margin:0.15rem 0 0"></p>
 
       <section id="habitList" aria-label="Habits"></section>
 
@@ -990,6 +1001,31 @@
       var weekStrip = document.getElementById("weekStrip");
       var habitList = document.getElementById("habitList");
 
+      // ---------- Category viewer: one category at a time ----------
+      // Arrows (on screen, and the keyboard's left/right keys) cycle
+      // through the categories in the saved order, wrapping around.
+      // Only the selected category's habits and heatmap are rendered,
+      // so there is no long scroll through every category.
+      var viewCategory = null;
+      function viewerCategories() {
+        return categoryOrder().filter(function (c) {
+          return state.habits.some(function (h) { return (h.category || "Other") === c; });
+        });
+      }
+      function currentViewCategory() {
+        var cats = viewerCategories();
+        if (cats.length === 0) return null;
+        if (viewCategory === null || cats.indexOf(viewCategory) === -1) viewCategory = cats[0];
+        return viewCategory;
+      }
+      function stepCategory(delta) {
+        var cats = viewerCategories();
+        if (cats.length === 0) return;
+        var idx = cats.indexOf(currentViewCategory());
+        viewCategory = cats[(idx + delta + cats.length) % cats.length];
+        render();
+      }
+
       function render() {
         today = toDayStr(new Date());
         if (selectedDay > today) selectedDay = today;
@@ -1055,25 +1091,26 @@
           return co.indexOf(a.category || "Other") - co.indexOf(b.category || "Other");
         });
 
-        groups.forEach(function (group) {
+        // Single-category viewer: only the selected category renders.
+        // Its big name and done count live in the viewer header above,
+        // so the per-group h2 is skipped.
+        var viewCats = viewerCategories();
+        var viewCat = currentViewCategory();
+        var viewGroup = null;
+        groups.forEach(function (g) { if ((g.category || "Other") === viewCat) viewGroup = g; });
+        var viewDone = viewGroup ? viewGroup.items.filter(function (h) {
+          return state.checks[selectedDay] && state.checks[selectedDay][h.id];
+        }).length : 0;
+        document.getElementById("catName").textContent = viewCat || "";
+        document.getElementById("catCount").textContent = viewGroup
+          ? viewDone + " of " + viewGroup.items.length + " done · " + (viewCats.indexOf(viewCat) + 1) + " of " + viewCats.length
+          : "";
+        document.getElementById("catPrev").disabled = viewCats.length <= 1;
+        document.getElementById("catNext").disabled = viewCats.length <= 1;
+
+        (viewGroup ? [viewGroup] : []).forEach(function (group) {
           var wrapDiv = document.createElement("div");
           wrapDiv.className = "group";
-          if (group.category) {
-            var h2 = document.createElement("h2");
-            var sw = document.createElement("span");
-            sw.className = "swatch";
-            sw.style.background = categoryColor(group.category);
-            h2.appendChild(sw);
-            h2.appendChild(document.createTextNode(group.category));
-            var doneInGroup = group.items.filter(function (h) {
-              return state.checks[selectedDay] && state.checks[selectedDay][h.id];
-            }).length;
-            var cnt = document.createElement("span");
-            cnt.className = "count";
-            cnt.textContent = doneInGroup + "/" + group.items.length;
-            h2.appendChild(cnt);
-            wrapDiv.appendChild(h2);
-          }
           var ul = document.createElement("ul");
           ul.className = "habits";
           group.items.forEach(function (habit) {
@@ -1548,6 +1585,18 @@
           selectedDay = addDays(selectedDay, 1);
           render();
         }
+      });
+
+      document.getElementById("catPrev").addEventListener("click", function () { stepCategory(-1); });
+      document.getElementById("catNext").addEventListener("click", function () { stepCategory(1); });
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+        // Never hijack arrows while typing, or while a modal is open.
+        var tag = (ev.target && ev.target.tagName) || "";
+        if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+        if (!document.getElementById("editModal").hidden) return;
+        if (!document.getElementById("valuesModal").hidden) return;
+        stepCategory(ev.key === "ArrowLeft" ? -1 : 1);
       });
 
       var editToggle = document.getElementById("editToggle");
