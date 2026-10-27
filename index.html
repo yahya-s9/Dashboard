@@ -112,7 +112,8 @@
       .graph-wrap svg { display: block; width: 100%; height: auto; }
       .graph-tip {
         position: absolute; z-index: 2; display: none; pointer-events: none;
-        transform: translate(-50%, -130%); white-space: nowrap;
+        transform: translate(-50%, -130%); white-space: normal; max-width: 260px;
+        line-height: 1.35; text-align: left;
         background: var(--text); color: var(--bg); font-size: 0.8rem; font-weight: 600;
         padding: 0.3rem 0.55rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.25);
       }
@@ -741,7 +742,10 @@
             var h2 = y(acc) - yTop2;
             acc += v;
             var color = categoryColor(c);
-            return '<rect data-day="' + p.day + '" data-cat="' + c + '" data-count="' + v + '" x="' + x(pi) + '" y="' + yTop2.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h2, 1).toFixed(1) + '" rx="2" fill="' + color + '"><title>' + shortLabel(p.day) + " · " + c + ": " + v + "</title></rect>";
+            var valueLines = state.habits.filter(function (h) {
+              return (h.category || "Other") === c && state.checks[p.day] && state.checks[p.day][h.id] && valuesSummary(p.day, h);
+            }).map(function (h) { return escapeHtml(h.name) + ": " + escapeHtml(valuesSummary(p.day, h)); }).join(" · ");
+            return '<rect data-day="' + p.day + '" data-cat="' + c + '" data-count="' + v + '" x="' + x(pi) + '" y="' + yTop2.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h2, 1).toFixed(1) + '" rx="2" fill="' + color + '"><title>' + shortLabel(p.day) + " · " + c + ": " + v + (valueLines ? " · " + valueLines : "") + "</title></rect>";
           }).join("");
         }).join("");
 
@@ -756,11 +760,23 @@
         function showTip(rect, ev) {
           var r = wrap.getBoundingClientRect();
           var x = ev.clientX - r.left, y = ev.clientY - r.top;
-          tip.textContent = shortLabel(rect.getAttribute("data-day")) + " · " +
-            rect.getAttribute("data-cat") + " · " + rect.getAttribute("data-count");
-          tip.style.left = Math.max(50, Math.min(r.width - 50, x)) + "px";
-          tip.style.top = Math.max(28, y) + "px";
+          var day = rect.getAttribute("data-day");
+          var cat = rect.getAttribute("data-cat");
+          var lines = [shortLabel(day) + " · " + cat + " · " + rect.getAttribute("data-count")];
+          // Field values for habits in this segment that have any that
+          // day (for a gray "Prayers incomplete" bar, any checked habit
+          // that day, since the bar is not one category).
+          state.habits.forEach(function (h) {
+            if (cat !== "Prayers incomplete" && (h.category || "Other") !== cat) return;
+            if (!(state.checks[day] && state.checks[day][h.id])) return;
+            var vs = valuesSummary(day, h);
+            if (vs) lines.push(h.name + ": " + vs);
+          });
+          tip.innerHTML = lines.map(function (l) { return escapeHtml(l); }).join("<br>");
           tip.classList.add("show");
+          var tw = tip.offsetWidth || 100;
+          tip.style.left = Math.max(tw / 2 + 4, Math.min(r.width - tw / 2 - 4, x)) + "px";
+          tip.style.top = Math.max(28, y) + "px";
         }
         function hideTip() { tip.classList.remove("show"); }
         wrap.querySelectorAll("rect[data-cat]").forEach(function (rect) {
