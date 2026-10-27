@@ -1446,15 +1446,15 @@
         }
         if (newCategory !== habit.category) {
           habit.category = newCategory;
-          apiPost({ action: "updateHabit", name: newName, category: newCategory });
+          apiPost({ action: "updateHabit", name: newName, oldName: oldName, category: newCategory });
         }
         if (colorChanged) {
           habit.color = modalPickedColor || null;
-          apiPost({ action: "updateHabitColor", name: newName, color: modalPickedColor || "" });
+          apiPost({ action: "updateHabitColor", name: newName, oldName: oldName, color: modalPickedColor || "" });
         }
         modalFieldsDeleted.forEach(function (orig) {
           state.habitFields = (state.habitFields || []).filter(function (f) { return !(f.habit === newName && f.field === orig); });
-          apiPost({ action: "removeField", habit: newName, field: orig });
+          apiPost({ action: "removeField", habit: newName, oldName: oldName, field: orig });
         });
         modalFieldsWorking.forEach(function (f) {
           if (!f.name) return;
@@ -1462,7 +1462,7 @@
             var dupField = (state.habitFields || []).some(function (x) { return x.habit === newName && x.field === f.name; });
             if (!dupField) {
               state.habitFields.push({ habit: newName, field: f.name, unit: f.unit, type: "number" });
-              apiPost({ action: "addField", habit: newName, field: f.name, unit: f.unit, type: "number" });
+              apiPost({ action: "addField", habit: newName, oldName: oldName, field: f.name, unit: f.unit, type: "number" });
             }
           } else {
             var origEntry = null;
@@ -1470,7 +1470,7 @@
             if (origEntry && (f.name !== f.orig || (origEntry.unit || "") !== f.unit)) {
               origEntry.field = f.name;
               origEntry.unit = f.unit;
-              apiPost({ action: "renameField", habit: newName, oldField: f.orig, newField: f.name, unit: f.unit });
+              apiPost({ action: "renameField", habit: newName, oldName: oldName, oldField: f.orig, newField: f.name, unit: f.unit });
             }
           }
         });
