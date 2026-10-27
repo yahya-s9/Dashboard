@@ -270,6 +270,13 @@
       /* ---- Footer / edit ---- */
       footer { margin-top: 1.75rem; border-top: 1px solid var(--border); padding-top: 1rem; }
       .edit-toggle { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; font-size: 0.95rem; }
+      /* Footer actions: Sync now, Backfill, Edit habits as one row. */
+      .footer-actions { display: flex; gap: 0.5rem; }
+      .footer-actions .footer-btn {
+        flex: 1; min-width: 0; min-height: 2.75rem; padding: 0 0.4rem;
+        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+        color: var(--text); font: inherit; font-weight: 600; font-size: 0.9rem;
+      }
       form.add { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.9rem; }
       form.add label { font-size: 0.88rem; color: var(--dim); margin-top: 0.35rem; }
       form.add input {
@@ -383,10 +390,12 @@
       <section id="habitList" aria-label="Habits"></section>
 
       <footer>
-        <button type="button" class="edit-toggle" id="syncBtn">Sync now</button>
-        <button type="button" class="edit-toggle" id="backfillToggle" aria-expanded="false" style="margin-left:1rem">Backfill a habit</button>
+        <div class="footer-actions">
+          <button type="button" class="footer-btn" id="syncBtn">Sync now</button>
+          <button type="button" class="footer-btn" id="backfillToggle" aria-expanded="false">Backfill a habit</button>
+          <button type="button" class="footer-btn" id="editToggle" aria-expanded="false">Edit habits</button>
+        </div>
         <p class="device-note" id="syncNote">Sync: not yet checked.</p>
-        <button type="button" class="edit-toggle" id="editToggle" aria-expanded="false">Edit habits</button>
         <form class="add" id="addForm" hidden>
           <label for="newName">New habit</label>
           <input id="newName" type="text" placeholder="e.g. Read 10 pages" autocomplete="off" />
