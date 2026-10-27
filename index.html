@@ -333,15 +333,16 @@
         <p class="bf-count" id="bfCount"></p>
       </section>
 
-      <section class="values-panel" id="valuesPanel" hidden aria-label="Habit values">
-        <h2 id="valuesTitle">Values</h2>
-        <div id="valuesInputs"></div>
-        <p class="device-note" style="margin-top:0.5rem">Saving values also marks this habit done for that day, if it isn't already.</p>
-        <div class="row">
-          <button type="button" class="values-save" id="valuesSave">Save values</button>
-          <button type="button" class="values-close" id="valuesClose">Close</button>
+      <div class="modal-backdrop" id="valuesModal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Habit values">
+          <h2 id="valuesModalTitle">Values</h2>
+          <div id="valuesModalInputs"></div>
+          <div class="modal-row">
+            <button type="button" class="modal-save" id="valuesModalSave">Save values</button>
+            <button type="button" class="modal-cancel" id="valuesModalSkip">Skip</button>
+          </div>
         </div>
-      </section>
+      </div>
 
       <div class="modal-backdrop" id="editModal" hidden>
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit habit">
@@ -1031,7 +1032,7 @@
         renderBackfillPanel();
         renderCategoryColors();
         renderCategoryOrder();
-        renderValuesPanel();
+
 
         // Habit groups, preserving list order
         habitList.innerHTML = "";
@@ -1134,7 +1135,7 @@
               vbtn.className = "values-btn";
               vbtn.textContent = "Values";
               vbtn.setAttribute("aria-label", "Enter values for " + habit.name);
-              vbtn.addEventListener("click", function () { openValuesPanel(habit.id); });
+              vbtn.addEventListener("click", function () { openValuesModal(habit.id); });
               li.appendChild(vbtn);
             }
 
@@ -1171,7 +1172,8 @@
       function toggleHabit(id) {
         var habit = habitById(id);
         if (!state.checks[selectedDay]) state.checks[selectedDay] = {};
-        if (state.checks[selectedDay][id]) {
+        var wasChecked = !!state.checks[selectedDay][id];
+        if (wasChecked) {
           delete state.checks[selectedDay][id];
           if (Object.keys(state.checks[selectedDay]).length === 0) delete state.checks[selectedDay];
           if (habit) apiPost({ action: "uncheck", date: selectedDay, habit: habit.name });
@@ -1181,6 +1183,12 @@
         }
         saveState();
         render();
+        // Newly checked a habit with fields: pop its fields modal right
+        // here for that day, instead of making the user find Values.
+        // Unchecking never opens it; Skip just keeps the check.
+        if (!wasChecked && habit && fieldsForHabit(habit.name).length > 0) {
+          openValuesModal(id);
+        }
       }
 
       // Recoloring a category sets every habit in it to that color, so
@@ -1472,23 +1480,19 @@
       }
 
       // ---------- Habit metadata: fields + per-day values ----------
-      var valuesPanelHabitId = null;
-      function openValuesPanel(habitId) {
-        valuesPanelHabitId = habitId;
-        renderValuesPanel();
-        document.getElementById("valuesPanel").scrollIntoView();
-      }
-      function renderValuesPanel() {
-        var panel = document.getElementById("valuesPanel");
-        if (!valuesPanelHabitId) { panel.hidden = true; return; }
-        var habit = habitById(valuesPanelHabitId);
-        if (!habit) { panel.hidden = true; valuesPanelHabitId = null; return; }
-        panel.hidden = false;
-        document.getElementById("valuesTitle").textContent =
+      // Values live in a modal, not a panel at the top of the page.
+      // It opens when a habit with fields is checked, and the Values
+      // button opens the same modal to edit values later.
+      var valuesModalHabitId = null;
+      function openValuesModal(habitId) {
+        var habit = habitById(habitId);
+        if (!habit) return;
+        valuesModalHabitId = habitId;
+        document.getElementById("valuesModalTitle").textContent =
           "Values for " + habit.name + " · " + shortLabel(selectedDay);
         var fields = fieldsForHabit(habit.name);
         var vals = valuesForDay(selectedDay, habit.id);
-        var wrap = document.getElementById("valuesInputs");
+        var wrap = document.getElementById("valuesModalInputs");
         wrap.innerHTML = "";
         fields.forEach(function (f) {
           var label = document.createElement("label");
@@ -1502,12 +1506,17 @@
           wrap.appendChild(label);
           wrap.appendChild(input);
         });
+        document.getElementById("valuesModal").hidden = false;
       }
-      function saveValuesPanel() {
-        var habit = habitById(valuesPanelHabitId);
-        if (!habit) return;
+      function closeValuesModal() {
+        valuesModalHabitId = null;
+        document.getElementById("valuesModal").hidden = true;
+      }
+      function saveValuesModal() {
+        var habit = habitById(valuesModalHabitId);
+        if (!habit) { closeValuesModal(); return; }
         var vals = {};
-        document.getElementById("valuesInputs").querySelectorAll("input[data-field]").forEach(function (input) {
+        document.getElementById("valuesModalInputs").querySelectorAll("input[data-field]").forEach(function (input) {
           if (input.value !== "") vals[input.getAttribute("data-field")] = input.value;
         });
         if (!state.values) state.values = {};
@@ -1521,7 +1530,7 @@
           state.checks[selectedDay][habit.id] = true;
           apiPost({ action: "check", date: selectedDay, habit: habit.name, category: habit.category || "" });
         }
-        valuesPanelHabitId = null;
+        closeValuesModal();
         saveState();
         render();
       }
@@ -1550,10 +1559,10 @@
         addForm.hidden = !editing;
         render();
       });
-      document.getElementById("valuesSave").addEventListener("click", saveValuesPanel);
-      document.getElementById("valuesClose").addEventListener("click", function () {
-        valuesPanelHabitId = null;
-        render();
+      document.getElementById("valuesModalSave").addEventListener("click", saveValuesModal);
+      document.getElementById("valuesModalSkip").addEventListener("click", closeValuesModal);
+      document.getElementById("valuesModal").addEventListener("click", function (ev) {
+        if (ev.target === document.getElementById("valuesModal")) closeValuesModal();
       });
       document.getElementById("modalSave").addEventListener("click", saveEditModal);
       document.getElementById("modalCancel").addEventListener("click", closeEditModal);
