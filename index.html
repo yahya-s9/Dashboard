@@ -1122,6 +1122,14 @@
               });
               li.appendChild(moveSel);
 
+              var ren = document.createElement("button");
+              ren.type = "button";
+              ren.className = "del-btn";
+              ren.textContent = "✎";
+              ren.setAttribute("aria-label", "Rename habit " + habit.name);
+              ren.addEventListener("click", function () { renameHabit(habit.id); });
+              li.appendChild(ren);
+
               var del = document.createElement("button");
               del.type = "button";
               del.className = "del-btn";
@@ -1275,6 +1283,26 @@
         if (!habit || habit.category === newCategory) return;
         habit.category = newCategory;
         if (habit) apiPost({ action: "updateHabit", name: habit.name, category: newCategory });
+        saveState();
+        render();
+      }
+
+      // Rename, keeping history: the Sheet keys check-ins, fields and
+      // values by habit name, so the script must rename the name in all
+      // four tabs — renaming locally only would orphan the old rows.
+      function renameHabit(id) {
+        var habit = habitById(id);
+        if (!habit) return;
+        var newName = window.prompt("Rename habit:", habit.name);
+        if (!newName) return;
+        newName = newName.trim();
+        if (!newName || newName === habit.name) return;
+        var dup = state.habits.some(function (h) { return h.id !== id && h.name === newName; });
+        if (dup) { window.alert("A habit named \"" + newName + "\" already exists — pick a different name."); return; }
+        var oldName = habit.name;
+        habit.name = newName;
+        (state.habitFields || []).forEach(function (f) { if (f.habit === oldName) f.habit = newName; });
+        apiPost({ action: "renameHabit", oldName: oldName, newName: newName });
         saveState();
         render();
       }
