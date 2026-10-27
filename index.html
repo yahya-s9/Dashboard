@@ -203,6 +203,21 @@
         flex: none; border: 1px solid var(--border); background: var(--surface);
         border-radius: var(--radius); padding: 0 0.8rem; font-size: 1.15rem; color: var(--dim);
       }
+      .values-btn {
+        flex: none; border: 1px solid var(--border); background: var(--surface);
+        border-radius: var(--radius); padding: 0 0.7rem; font-size: 0.85rem; font-weight: 600; color: var(--accent);
+      }
+      .values-panel { margin-top: 1.1rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+      .values-panel h2 { font-size: 0.9rem; font-weight: 700; margin: 0 0 0.6rem; }
+      .values-panel label { display: block; font-size: 0.88rem; color: var(--dim); margin-top: 0.5rem; }
+      .values-panel input { width: 100%; min-height: 2.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0 0.8rem; font: inherit; margin-top: 0.25rem; }
+      .values-panel .row { display: flex; gap: 0.5rem; margin-top: 0.9rem; }
+      .values-panel .row button { flex: 1; min-height: 2.75rem; border-radius: var(--radius); font-weight: 700; }
+      .values-save { border: none; background: var(--accent); color: var(--accent-ink); }
+      .values-close { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+      .field-list-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0; font-size: 0.9rem; }
+      .field-list-row span { flex: 1; }
+      .field-list-row button { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 0.25rem 0.6rem; color: var(--dim); }
       .move-select {
         flex: none; max-width: 7.5rem; min-height: 3.5rem; border: 1px solid var(--border);
         border-radius: var(--radius); background: var(--surface); color: var(--text);
@@ -284,6 +299,16 @@
         <p class="bf-count" id="bfCount"></p>
       </section>
 
+      <section class="values-panel" id="valuesPanel" hidden aria-label="Habit values">
+        <h2 id="valuesTitle">Values</h2>
+        <div id="valuesInputs"></div>
+        <p class="device-note" style="margin-top:0.5rem">Saving values also marks this habit done for that day, if it isn't already.</p>
+        <div class="row">
+          <button type="button" class="values-save" id="valuesSave">Save values</button>
+          <button type="button" class="values-close" id="valuesClose">Close</button>
+        </div>
+      </section>
+
       <section id="habitList" aria-label="Habits"></section>
 
       <footer>
@@ -305,6 +330,16 @@
           <div id="categoryOrderList"></div>
           <button type="submit" id="addBtn" disabled>Add habit</button>
         </form>
+        <div id="fieldEditor" hidden>
+          <label>Habit fields — add a tracked value to any habit (e.g. Distance in km for Cardio)</label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.35rem">
+            <select id="fieldHabit" aria-label="Habit for new field" style="flex:1; min-width:10rem; min-height:2.75rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); padding:0 0.6rem; font:inherit"></select>
+            <input id="fieldName" type="text" placeholder="Field, e.g. Distance" autocomplete="off" style="flex:1; min-width:8rem; min-height:2.75rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); padding:0 0.8rem; font:inherit" />
+            <input id="fieldUnit" type="text" placeholder="Unit, e.g. km" autocomplete="off" style="flex:0 0 6rem; min-height:2.75rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); padding:0 0.8rem; font:inherit" />
+            <button type="button" class="edit-toggle" id="fieldAddBtn">Add field</button>
+          </div>
+          <div id="fieldList"></div>
+        </div>
         <p class="device-note">Check-ins sync to a Google Sheet when online, and are also saved on this device as a backup. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
       </footer>
     </main>
@@ -371,8 +406,28 @@
           habits: SEED_HABITS.map(function (h) {
             return { id: nextId(), name: h.name, category: h.category };
           }),
-          checks: {} // { "YYYY-MM-DD": { habitId: true } }
+          checks: {}, // { "YYYY-MM-DD": { habitId: true } }
+          habitFields: [], // [{ habit, field, unit, type }]
+          values: {} // { "YYYY-MM-DD": { habitId: { fieldName: value } } }
         };
+      }
+      // Field definitions for one habit, in definition order.
+      function fieldsForHabit(habitName) {
+        return (state.habitFields || []).filter(function (f) { return f.habit === habitName; });
+      }
+      function valuesForDay(day, habitId) {
+        return (state.values && state.values[day] && state.values[day][habitId]) || {};
+      }
+      function valuesSummary(day, habit) {
+        var fields = fieldsForHabit(habit.name);
+        var vals = valuesForDay(day, habit.id);
+        var parts = [];
+        fields.forEach(function (f) {
+          if (vals[f.field] !== undefined && vals[f.field] !== "" && vals[f.field] !== null) {
+            parts.push(vals[f.field] + (f.unit ? " " + f.unit : ""));
+          }
+        });
+        return parts.join(" · ");
       }
 
       function loadState() {
@@ -459,6 +514,21 @@
             });
             state.habits = newHabits;
             state.checks = newChecks;
+            if (Array.isArray(data.habitFields)) {
+              state.habitFields = data.habitFields.map(function (f) {
+                return { habit: f.habit, field: f.field, unit: f.unit || "", type: f.type || "number" };
+              });
+            }
+            var newValues = {};
+            (data.checkinValues || []).forEach(function (v) {
+              var h = null;
+              newHabits.forEach(function (x) { if (x.name === v.habit) h = x; });
+              if (!h) return;
+              if (!newValues[v.date]) newValues[v.date] = {};
+              if (!newValues[v.date][h.id]) newValues[v.date][h.id] = {};
+              newValues[v.date][h.id][v.field] = v.value;
+            });
+            state.values = newValues;
             if (data.categoryOrder && Array.isArray(data.categoryOrder)) {
               storedCategoryOrder = data.categoryOrder;
               state.categoryOrder = data.categoryOrder;
@@ -913,6 +983,8 @@
         renderBackfillPanel();
         renderCategoryColors();
         renderCategoryOrder();
+        renderValuesPanel();
+        renderFieldEditor();
 
         // Habit groups, preserving list order
         habitList.innerHTML = "";
@@ -984,6 +1056,14 @@
             name.textContent = habit.name;
             btn.appendChild(name);
 
+            var vsum = valuesSummary(selectedDay, habit);
+            if (vsum) {
+              var vm = document.createElement("span");
+              vm.className = "habit-meta";
+              vm.textContent = vsum;
+              btn.appendChild(vm);
+            }
+
             var streak = currentStreak(habit.id);
             var total = habitTotal(habit.id);
             if (streak >= 2) {
@@ -1000,6 +1080,16 @@
 
             btn.addEventListener("click", function () { toggleHabit(habit.id); });
             li.appendChild(btn);
+
+            if (fieldsForHabit(habit.name).length > 0) {
+              var vbtn = document.createElement("button");
+              vbtn.type = "button";
+              vbtn.className = "values-btn";
+              vbtn.textContent = "Values";
+              vbtn.setAttribute("aria-label", "Enter values for " + habit.name);
+              vbtn.addEventListener("click", function () { openValuesPanel(habit.id); });
+              li.appendChild(vbtn);
+            }
 
             if (editing) {
               // Move, don't delete-and-re-add: the habit keeps its id, so
@@ -1196,9 +1286,107 @@
             if (Object.keys(state.checks[day]).length === 0) delete state.checks[day];
           }
         }
+        if (habit) {
+          state.habitFields = (state.habitFields || []).filter(function (f) { return f.habit !== habit.name; });
+          for (var day2 in (state.values || {})) if (state.values[day2][id]) delete state.values[day2][id];
+        }
         if (habit) apiPost({ action: "removeHabit", name: habit.name });
         saveState();
         render();
+      }
+
+      // ---------- Habit metadata: fields + per-day values ----------
+      var valuesPanelHabitId = null;
+      function openValuesPanel(habitId) {
+        valuesPanelHabitId = habitId;
+        renderValuesPanel();
+        document.getElementById("valuesPanel").scrollIntoView();
+      }
+      function renderValuesPanel() {
+        var panel = document.getElementById("valuesPanel");
+        if (!valuesPanelHabitId) { panel.hidden = true; return; }
+        var habit = habitById(valuesPanelHabitId);
+        if (!habit) { panel.hidden = true; valuesPanelHabitId = null; return; }
+        panel.hidden = false;
+        document.getElementById("valuesTitle").textContent =
+          "Values for " + habit.name + " · " + shortLabel(selectedDay);
+        var fields = fieldsForHabit(habit.name);
+        var vals = valuesForDay(selectedDay, habit.id);
+        var wrap = document.getElementById("valuesInputs");
+        wrap.innerHTML = "";
+        fields.forEach(function (f) {
+          var label = document.createElement("label");
+          label.textContent = f.field + (f.unit ? " (" + f.unit + ")" : "");
+          var input = document.createElement("input");
+          input.setAttribute("data-field", f.field);
+          input.type = f.type === "text" ? "text" : "number";
+          if (input.type === "number") input.step = "any";
+          input.value = vals[f.field] !== undefined ? vals[f.field] : "";
+          input.setAttribute("aria-label", f.field);
+          wrap.appendChild(label);
+          wrap.appendChild(input);
+        });
+      }
+      function saveValuesPanel() {
+        var habit = habitById(valuesPanelHabitId);
+        if (!habit) return;
+        var vals = {};
+        document.getElementById("valuesInputs").querySelectorAll("input[data-field]").forEach(function (input) {
+          if (input.value !== "") vals[input.getAttribute("data-field")] = input.value;
+        });
+        if (!state.values) state.values = {};
+        if (!state.values[selectedDay]) state.values[selectedDay] = {};
+        if (Object.keys(vals).length === 0) delete state.values[selectedDay][habit.id];
+        else state.values[selectedDay][habit.id] = vals;
+        apiPost({ action: "setValues", date: selectedDay, habit: habit.name, values: vals });
+        // Values imply the habit was done that day.
+        if (!(state.checks[selectedDay] && state.checks[selectedDay][habit.id])) {
+          if (!state.checks[selectedDay]) state.checks[selectedDay] = {};
+          state.checks[selectedDay][habit.id] = true;
+          apiPost({ action: "check", date: selectedDay, habit: habit.name, category: habit.category || "" });
+        }
+        valuesPanelHabitId = null;
+        saveState();
+        render();
+      }
+      function renderFieldEditor() {
+        var editor = document.getElementById("fieldEditor");
+        editor.hidden = !editing;
+        if (!editing) return;
+        var sel = document.getElementById("fieldHabit");
+        sel.innerHTML = "";
+        state.habits.forEach(function (h) {
+          var opt = document.createElement("option");
+          opt.value = h.id;
+          opt.textContent = (h.category ? h.category + " · " : "") + h.name;
+          sel.appendChild(opt);
+        });
+        var list = document.getElementById("fieldList");
+        list.innerHTML = "";
+        (state.habitFields || []).forEach(function (f) {
+          var row = document.createElement("div");
+          row.className = "field-list-row";
+          var span = document.createElement("span");
+          span.textContent = f.habit + " — " + f.field + (f.unit ? " (" + f.unit + ")" : "");
+          var del = document.createElement("button");
+          del.type = "button";
+          del.textContent = "×";
+          del.setAttribute("aria-label", "Remove field " + f.field + " from " + f.habit);
+          del.addEventListener("click", function () {
+            state.habitFields = (state.habitFields || []).filter(function (x) { return !(x.habit === f.habit && x.field === f.field); });
+            for (var day in (state.values || {})) {
+              state.habits.forEach(function (h) {
+                if (h.name === f.habit && state.values[day][h.id]) delete state.values[day][h.id][f.field];
+              });
+            }
+            apiPost({ action: "removeField", habit: f.habit, field: f.field });
+            saveState();
+            render();
+          });
+          row.appendChild(span);
+          row.appendChild(del);
+          list.appendChild(row);
+        });
       }
 
       document.getElementById("backToday").addEventListener("click", function () {
@@ -1224,6 +1412,28 @@
         editToggle.textContent = editing ? "Done editing" : "Edit habits";
         editToggle.setAttribute("aria-expanded", editing ? "true" : "false");
         addForm.hidden = !editing;
+        render();
+      });
+      document.getElementById("valuesSave").addEventListener("click", saveValuesPanel);
+      document.getElementById("valuesClose").addEventListener("click", function () {
+        valuesPanelHabitId = null;
+        render();
+      });
+      document.getElementById("fieldAddBtn").addEventListener("click", function () {
+        var habit = habitById(document.getElementById("fieldHabit").value);
+        var fieldName = document.getElementById("fieldName").value.trim();
+        var unit = document.getElementById("fieldUnit").value.trim();
+        if (!habit || !fieldName) return;
+        var dup = (state.habitFields || []).some(function (f) {
+          return f.habit === habit.name && f.field.toLowerCase() === fieldName.toLowerCase();
+        });
+        if (dup) return;
+        if (!state.habitFields) state.habitFields = [];
+        state.habitFields.push({ habit: habit.name, field: fieldName, unit: unit, type: "number" });
+        apiPost({ action: "addField", habit: habit.name, field: fieldName, unit: unit, type: "number" });
+        document.getElementById("fieldName").value = "";
+        document.getElementById("fieldUnit").value = "";
+        saveState();
         render();
       });
 
