@@ -84,6 +84,12 @@
       .cat-viewer h2 { flex: 1; text-align: center; font-size: 1.65rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
       .cat-edit { flex: none; background: none; border: none; padding: 0.25rem; color: var(--dim); font-size: 1.1rem; line-height: 1; }
       .cat-goal { text-align: center; color: var(--dim); font-size: 0.9rem; font-style: italic; margin: 0.15rem 0 0; }
+      .kpi-card { margin-top: 1rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+      .kpi-card h3 { font-size: 1rem; font-weight: 700; margin: 0 0 0.5rem; }
+      .kpi-log { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
+      .kpi-log label { color: var(--dim); font-size: 0.88rem; white-space: nowrap; }
+      .kpi-log input { flex: 1; min-width: 0; min-height: 2.5rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); padding: 0 0.6rem; font: inherit; }
+      .kpi-log .footer-btn { flex: none; min-height: 2.5rem; padding: 0 1rem; }
       .back-today {
         background: none; border: none; padding: 0.25rem 0;
         color: var(--accent); font-weight: 600; font-size: 0.9rem; white-space: nowrap;
@@ -396,6 +402,22 @@
           <input id="catModalName" type="text" autocomplete="off" />
           <label for="catModalGoal">Goal — what this category is working toward</label>
           <input id="catModalGoal" type="text" placeholder="e.g. Reach 160 lbs" autocomplete="off" />
+          <label for="catModalKpi">KPI — the number that tracks this goal</label>
+          <input id="catModalKpi" type="text" placeholder="e.g. Weight" autocomplete="off" />
+          <label for="catModalUnit">KPI unit — pick one to graph the KPI over time</label>
+          <select id="catModalUnit">
+            <option value="">No unit yet</option>
+            <option value="lbs">lbs</option>
+            <option value="kg">kg</option>
+            <option value="$">$</option>
+            <option value="%">%</option>
+            <option value="min">min</option>
+            <option value="hr">hr</option>
+            <option value="km">km</option>
+            <option value="miles">miles</option>
+            <option value="pages">pages</option>
+            <option value="count">count</option>
+          </select>
           <div class="modal-row">
             <button type="button" class="modal-save" id="catModalSave">Save</button>
             <button type="button" class="modal-cancel" id="catModalCancel">Cancel</button>
@@ -424,6 +446,17 @@
       </div>
       <p class="cat-count" id="catCount" style="text-align:center;color:var(--dim);font-size:0.85rem;margin:0.15rem 0 0"></p>
       <p class="cat-goal" id="catGoal" hidden></p>
+
+      <section class="kpi-card" id="kpiCard" hidden aria-label="Category KPI">
+        <h3 id="kpiTitle"></h3>
+        <div id="kpiChart"></div>
+        <div class="kpi-log">
+          <label id="kpiInputLabel" for="kpiInput">Value</label>
+          <input id="kpiInput" type="number" step="any" autocomplete="off" />
+          <button type="button" class="footer-btn" id="kpiSave">Save</button>
+        </div>
+        <p class="device-note" id="kpiHint" hidden></p>
+      </section>
 
       <section id="habitList" aria-label="Habits"></section>
 
@@ -639,6 +672,14 @@
             }
             if (data.categoryGoals && typeof data.categoryGoals === "object") {
               state.categoryGoals = data.categoryGoals;
+            }
+            if (Array.isArray(data.kpiValues)) {
+              var newKpi = {};
+              data.kpiValues.forEach(function (v) {
+                if (!newKpi[v.date]) newKpi[v.date] = {};
+                newKpi[v.date][v.category] = v.value;
+              });
+              state.kpiValues = newKpi;
             }
             saveState();
             setSyncNote("synced with Google Sheet");
@@ -1057,6 +1098,15 @@
       var weekStrip = document.getElementById("weekStrip");
       var habitList = document.getElementById("habitList");
 
+      // Category goal info: stored as { goal, kpi, unit } per category
+      // in Settings; older string-only goals still read as { goal }.
+      function categoryInfo(cat) {
+        var g = state.categoryGoals ? state.categoryGoals[cat] : null;
+        if (!g) return { goal: "", kpi: "", unit: "" };
+        if (typeof g === "string") return { goal: g, kpi: "", unit: "" };
+        return { goal: g.goal || "", kpi: g.kpi || "", unit: g.unit || "" };
+      }
+
       // ---------- Category viewer: one category at a time ----------
       // Arrows (on screen, and the keyboard's left/right keys) cycle
       // through the categories in the saved order, wrapping around.
@@ -1162,9 +1212,10 @@
           ? viewDone + " of " + viewGroup.items.length + " done · " + (viewCats.indexOf(viewCat) + 1) + " of " + viewCats.length
           : "";
         var catGoalEl = document.getElementById("catGoal");
-        var catGoal = viewCat && state.categoryGoals ? state.categoryGoals[viewCat] : "";
+        var catGoal = viewCat ? categoryInfo(viewCat).goal : "";
         catGoalEl.hidden = !catGoal;
         catGoalEl.textContent = catGoal ? "Goal: " + catGoal : "";
+        updateKpiCard(viewCat);
         document.getElementById("catPrev").disabled = viewCats.length <= 1;
         document.getElementById("catNext").disabled = viewCats.length <= 1;
 
@@ -1652,14 +1703,102 @@
 
       document.getElementById("catPrev").addEventListener("click", function () { stepCategory(-1); });
       document.getElementById("catNext").addEventListener("click", function () { stepCategory(1); });
+      // ---------- Category KPI: log a value per day, graph over time ----------
+      function kpiEntries(cat) {
+        var out = [];
+        if (!cat || !state.kpiValues) return out;
+        Object.keys(state.kpiValues).sort().forEach(function (d) {
+          var v = state.kpiValues[d][cat];
+          if (v !== undefined && v !== "" && v !== null) out.push({ date: d, value: Number(v) });
+        });
+        return out.filter(function (e) { return !isNaN(e.value); });
+      }
+      function updateKpiCard(cat) {
+        var card = document.getElementById("kpiCard");
+        if (!cat) { card.hidden = true; return; }
+        var info = categoryInfo(cat);
+        if (!info.kpi) { card.hidden = true; return; }
+        card.hidden = false;
+        var entries = kpiEntries(cat);
+        var latest = entries.length ? entries[entries.length - 1] : null;
+        document.getElementById("kpiTitle").textContent =
+          info.kpi + (info.unit ? " (" + info.unit + ")" : "") +
+          (latest ? " · latest " + latest.value + (info.unit ? " " + info.unit : "") : "");
+        // Line chart over time. Without a unit there is no axis label
+        // to graph against, so the chart waits until one is picked.
+        var chart = document.getElementById("kpiChart");
+        var hint = document.getElementById("kpiHint");
+        if (!info.unit) {
+          chart.innerHTML = "";
+          hint.hidden = false;
+          hint.textContent = "Pick a unit in the category edit (✎ by the name) to graph this KPI over time.";
+        } else if (entries.length === 0) {
+          chart.innerHTML = "";
+          hint.hidden = false;
+          hint.textContent = "No values logged yet — log one below.";
+        } else {
+          hint.hidden = true;
+          var W = 600, H = 160, padL = 44, padR = 10, padT = 10, padB = 24;
+          var iw = W - padL - padR, ih = H - padT - padB;
+          var vals = entries.map(function (e) { return e.value; });
+          var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+          if (hi === lo) { hi += 1; lo -= 1; }
+          var pad = (hi - lo) * 0.1; hi += pad; lo -= pad;
+          function kx(i) { return entries.length === 1 ? padL + iw / 2 : padL + (i / (entries.length - 1)) * iw; }
+          function ky(v) { return padT + ih - ((v - lo) / (hi - lo)) * ih; }
+          var pts = entries.map(function (e, i) { return kx(i).toFixed(1) + "," + ky(e.value).toFixed(1); }).join(" ");
+          var dots = entries.map(function (e, i) {
+            return '<circle cx="' + kx(i).toFixed(1) + '" cy="' + ky(e.value).toFixed(1) + '" r="4" fill="var(--accent)"><title>' + shortLabel(e.date) + ": " + e.value + " " + info.unit + "</title></circle>";
+          }).join("");
+          var labels = "";
+          [0, Math.floor((entries.length - 1) / 2), entries.length - 1].filter(function (v, i, a) { return a.indexOf(v) === i; }).forEach(function (i) {
+            labels += '<text x="' + kx(i) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="11" fill="var(--dim)">' + shortLabel(entries[i].date) + "</text>";
+          });
+          chart.innerHTML =
+            '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + info.kpi + ' over time">' +
+            '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + ky(hi).toFixed(1) + '" y2="' + ky(hi).toFixed(1) + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 4"/>' +
+            '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + ky(lo).toFixed(1) + '" y2="' + ky(lo).toFixed(1) + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 4"/>' +
+            '<text x="' + (padL - 6) + '" y="' + (ky(hi) + 4) + '" text-anchor="end" font-size="11" fill="var(--dim)">' + hi.toFixed(1) + "</text>" +
+            '<text x="' + (padL - 6) + '" y="' + (ky(lo) + 4) + '" text-anchor="end" font-size="11" fill="var(--dim)">' + lo.toFixed(1) + "</text>" +
+            '<polyline points="' + pts + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+            dots + labels + "</svg>";
+        }
+        // Log form for the selected day; prefill only when not typing.
+        var input = document.getElementById("kpiInput");
+        document.getElementById("kpiInputLabel").textContent = info.kpi + " on " + shortLabel(selectedDay) + (info.unit ? " (" + info.unit + ")" : "");
+        if (document.activeElement !== input) {
+          var cur = state.kpiValues && state.kpiValues[selectedDay] ? state.kpiValues[selectedDay][cat] : undefined;
+          input.value = cur !== undefined ? cur : "";
+        }
+        var canLog = !!info.unit;
+        input.disabled = !canLog;
+        document.getElementById("kpiSave").disabled = !canLog;
+      }
+      function saveKpi() {
+        var cat = currentViewCategory();
+        if (!cat || !categoryInfo(cat).unit) return;
+        var input = document.getElementById("kpiInput");
+        var val = input.value.trim();
+        if (!state.kpiValues) state.kpiValues = {};
+        if (!state.kpiValues[selectedDay]) state.kpiValues[selectedDay] = {};
+        if (val === "") delete state.kpiValues[selectedDay][cat];
+        else state.kpiValues[selectedDay][cat] = val;
+        apiPost({ action: "setKpiValue", date: selectedDay, category: cat, value: val });
+        saveState();
+        render();
+      }
+
       // Viewer pencil: rename the category and set its goal.
       var catModalCategory = null;
       function openCategoryModal() {
         var cat = currentViewCategory();
         if (!cat) return;
         catModalCategory = cat;
+        var info = categoryInfo(cat);
         document.getElementById("catModalName").value = cat;
-        document.getElementById("catModalGoal").value = (state.categoryGoals && state.categoryGoals[cat]) || "";
+        document.getElementById("catModalGoal").value = info.goal;
+        document.getElementById("catModalKpi").value = info.kpi;
+        document.getElementById("catModalUnit").value = info.unit;
         document.getElementById("categoryModal").hidden = false;
       }
       function closeCategoryModal() {
@@ -1671,6 +1810,8 @@
         if (!oldName) { closeCategoryModal(); return; }
         var newName = document.getElementById("catModalName").value.trim();
         var goal = document.getElementById("catModalGoal").value.trim();
+        var kpi = document.getElementById("catModalKpi").value.trim();
+        var unit = document.getElementById("catModalUnit").value;
         if (!newName) { window.alert("A category needs a name."); return; }
         if (newName !== oldName && viewerCategories().indexOf(newName) !== -1) {
           window.alert("A category named \"" + newName + "\" already exists — pick a different name.");
@@ -1684,15 +1825,27 @@
           apiPost({ action: "renameCategory", oldName: oldName, newName: newName });
         }
         if (!state.categoryGoals) state.categoryGoals = {};
-        if (goal) state.categoryGoals[newName] = goal;
+        if (goal || kpi || unit) state.categoryGoals[newName] = { goal: goal, kpi: kpi, unit: unit };
         else delete state.categoryGoals[newName];
         if (newName !== oldName) delete state.categoryGoals[oldName];
+        // KPI values are keyed by category name, so a rename moves them too.
+        if (newName !== oldName && state.kpiValues) {
+          Object.keys(state.kpiValues).forEach(function (d) {
+            if (state.kpiValues[d][oldName] !== undefined) {
+              state.kpiValues[d][newName] = state.kpiValues[d][oldName];
+              delete state.kpiValues[d][oldName];
+              apiPost({ action: "setKpiValue", date: d, category: newName, value: state.kpiValues[d][newName] });
+              apiPost({ action: "setKpiValue", date: d, category: oldName, value: "" });
+            }
+          });
+        }
         // Whole-object write, so it stays correct whichever post lands first.
         apiPost({ action: "updateCategoryGoals", goals: state.categoryGoals });
         closeCategoryModal();
         saveState();
         render();
       }
+      document.getElementById("kpiSave").addEventListener("click", saveKpi);
       document.getElementById("catEdit").addEventListener("click", openCategoryModal);
       document.getElementById("catModalSave").addEventListener("click", saveCategoryModal);
       document.getElementById("catModalCancel").addEventListener("click", closeCategoryModal);
