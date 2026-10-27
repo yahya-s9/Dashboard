@@ -792,15 +792,25 @@
 
         // Stacked bars: bottom segment first, so the first category sits
         // on the axis and later categories stack on top of it. A day
-        // without all 5 prayers is one gray bar instead of colored
-        // segments, and its score is 0 even though the bar shows the
-        // habits that were checked.
+        // without all 5 prayers still stacks by category, but every
+        // segment is gray and its score is 0 even though the bar shows
+        // the habits that were checked — so hovering one segment shows
+        // only that category's field values in the tooltip.
         var bars = series.map(function (p, pi) {
           if (p.raw === 0) return "";
           if (!p.prayers) {
-            var yTop = y(p.raw);
-            var h = y(0) - yTop;
-            return '<rect data-day="' + p.day + '" data-cat="Prayers incomplete" data-count="' + p.raw + '" x="' + x(pi) + '" y="' + yTop.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, 1).toFixed(1) + '" rx="2" style="fill:var(--dim)" opacity="0.55"><title>' + shortLabel(p.day) + " · Score 0 — prayers incomplete (" + p.raw + " checked)</title></rect>";
+            var accG = 0;
+            return cats.map(function (c) {
+              var v = p.counts[c] || 0;
+              if (v === 0) return "";
+              var yTopG = y(accG + v);
+              var hG = y(accG) - yTopG;
+              accG += v;
+              var valueLinesG = state.habits.filter(function (h) {
+                return (h.category || "Other") === c && state.checks[p.day] && state.checks[p.day][h.id] && valuesSummary(p.day, h);
+              }).map(function (h) { return escapeHtml(h.name) + ": " + escapeHtml(valuesSummary(p.day, h)); }).join(" · ");
+              return '<rect data-day="' + p.day + '" data-cat="' + c + '" data-count="' + v + '" x="' + x(pi) + '" y="' + yTopG.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(hG, 1).toFixed(1) + '" rx="2" style="fill:var(--dim)" opacity="0.55"><title>' + shortLabel(p.day) + " · " + c + ": " + v + " · Score 0 — prayers incomplete" + (valueLinesG ? " · " + valueLinesG : "") + "</title></rect>";
+            }).join("");
           }
           var acc = 0;
           return cats.map(function (c) {
@@ -830,10 +840,10 @@
           var x = ev.clientX - r.left, y = ev.clientY - r.top;
           var day = rect.getAttribute("data-day");
           var cat = rect.getAttribute("data-cat");
-          var lines = [shortLabel(day) + " · " + cat + " · " + rect.getAttribute("data-count")];
+          var lines = [shortLabel(day) + " · " + cat + " · " + rect.getAttribute("data-count") + (prayersDone(day) ? "" : " · Score 0")];
           // Field values for habits in this segment that have any that
-          // day (for a gray "Prayers incomplete" bar, any checked habit
-          // that day, since the bar is not one category).
+          // day. Gray (prayers-incomplete) segments are per-category
+          // too, so the filter below already splits them correctly.
           state.habits.forEach(function (h) {
             if (cat !== "Prayers incomplete" && (h.category || "Other") !== cat) return;
             if (!(state.checks[day] && state.checks[day][h.id])) return;
