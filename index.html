@@ -225,6 +225,38 @@
       .field-list-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0; font-size: 0.9rem; }
       .field-list-row span { flex: 1; }
       .field-list-row button { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 0.25rem 0.6rem; color: var(--dim); }
+      .edit-btn {
+        flex: none; border: 1px solid var(--border); background: var(--surface);
+        border-radius: var(--radius); padding: 0 0.7rem; font-size: 1rem; color: var(--dim);
+      }
+      /* Per-habit edit modal: one place for rename, color, category,
+         fields, and delete — no more scattered edit-mode controls. */
+      .modal-backdrop {
+        position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start;
+        justify-content: center; padding: 4vh 1rem 1rem; overflow-y: auto;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      .modal-card {
+        width: 100%; max-width: 430px; background: var(--surface); color: var(--text);
+        border: 1px solid var(--border); border-radius: 16px; padding: 1.1rem;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+      }
+      .modal-card h2 { font-size: 1.05rem; margin: 0 0 0.8rem; }
+      .modal-card label { display: block; font-size: 0.88rem; color: var(--dim); margin-top: 0.7rem; }
+      .modal-card input[type="text"], .modal-card select {
+        width: 100%; min-height: 2.75rem; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--bg); color: var(--text); padding: 0 0.8rem; font: inherit; margin-top: 0.25rem;
+      }
+      .modal-field-row { display: flex; gap: 0.4rem; margin-top: 0.4rem; align-items: center; }
+      .modal-field-row input:first-child { flex: 1.4; }
+      .modal-field-row input:nth-child(2) { flex: 0.7; }
+      .modal-field-row button { flex: none; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 0.5rem 0.7rem; color: var(--dim); }
+      .modal-row { display: flex; gap: 0.5rem; margin-top: 1rem; }
+      .modal-row button { flex: 1; min-height: 2.75rem; border-radius: var(--radius); font-weight: 700; }
+      .modal-save { border: none; background: var(--accent); color: var(--accent-ink); }
+      .modal-cancel { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+      .modal-delete { border: 1px solid #ef4444; background: transparent; color: #ef4444; margin-top: 0.6rem; width: 100%; min-height: 2.75rem; border-radius: var(--radius); font-weight: 700; }
+      .modal-delete.armed { background: #ef4444; color: #fff; }
       .move-select {
         flex: none; max-width: 7.5rem; min-height: 3.5rem; border: 1px solid var(--border);
         border-radius: var(--radius); background: var(--surface); color: var(--text);
@@ -311,6 +343,31 @@
         </div>
       </section>
 
+      <div class="modal-backdrop" id="editModal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit habit">
+          <h2 id="modalTitle">Edit habit</h2>
+          <label for="modalName">Name</label>
+          <input id="modalName" type="text" autocomplete="off" />
+          <label for="modalCategory">Category</label>
+          <select id="modalCategory"></select>
+          <label>Color (leave unset to follow the category)</label>
+          <div class="color-pick" id="modalColorPick" role="group" aria-label="Habit color"></div>
+          <button type="button" class="edit-toggle" id="modalColorFollow" style="margin-top:0.4rem">Follow category color</button>
+          <label>Fields — edit the name or unit, delete one, or add a new one</label>
+          <div id="modalFieldList"></div>
+          <div class="modal-field-row">
+            <input id="modalNewFieldName" type="text" placeholder="Field, e.g. Distance" autocomplete="off" />
+            <input id="modalNewFieldUnit" type="text" placeholder="Unit, e.g. km" autocomplete="off" />
+            <button type="button" id="modalAddField">Add</button>
+          </div>
+          <div class="modal-row">
+            <button type="button" class="modal-save" id="modalSave">Save</button>
+            <button type="button" class="modal-cancel" id="modalCancel">Cancel</button>
+          </div>
+          <button type="button" class="modal-delete" id="modalDelete">Delete habit</button>
+        </div>
+      </div>
+
       <section id="habitList" aria-label="Habits"></section>
 
       <footer>
@@ -332,16 +389,6 @@
           <div id="categoryOrderList"></div>
           <button type="submit" id="addBtn" disabled>Add habit</button>
         </form>
-        <div id="fieldEditor" hidden>
-          <label>Habit fields — add a tracked value to any habit (e.g. Distance in km for Cardio)</label>
-          <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.35rem">
-            <select id="fieldHabit" aria-label="Habit for new field" style="flex:1; min-width:10rem; min-height:2.75rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); padding:0 0.6rem; font:inherit"></select>
-            <input id="fieldName" type="text" placeholder="Field, e.g. Distance" autocomplete="off" style="flex:1; min-width:8rem; min-height:2.75rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); padding:0 0.8rem; font:inherit" />
-            <input id="fieldUnit" type="text" placeholder="Unit, e.g. km" autocomplete="off" style="flex:0 0 6rem; min-height:2.75rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); padding:0 0.8rem; font:inherit" />
-            <button type="button" class="edit-toggle" id="fieldAddBtn">Add field</button>
-          </div>
-          <div id="fieldList"></div>
-        </div>
         <p class="device-note">Check-ins sync to a Google Sheet when online, and are also saved on this device as a backup. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
       </footer>
     </main>
@@ -985,7 +1032,6 @@
         renderCategoryColors();
         renderCategoryOrder();
         renderValuesPanel();
-        renderFieldEditor();
 
         // Habit groups, preserving list order
         habitList.innerHTML = "";
@@ -1092,52 +1138,16 @@
               li.appendChild(vbtn);
             }
 
-            if (editing) {
-              // Move, don't delete-and-re-add: the habit keeps its id, so
-              // its checks, streak and totals move with it to the new category.
-              var moveSel = document.createElement("select");
-              moveSel.className = "move-select";
-              moveSel.setAttribute("aria-label", "Move " + habit.name + " to category");
-              var cats = [];
-              state.habits.forEach(function (h) { if (h.category && cats.indexOf(h.category) === -1) cats.push(h.category); });
-              cats.forEach(function (c) {
-                var opt = document.createElement("option");
-                opt.value = c;
-                opt.textContent = c;
-                if (c === habit.category) opt.selected = true;
-                moveSel.appendChild(opt);
-              });
-              var newOpt = document.createElement("option");
-              newOpt.value = "__new__";
-              newOpt.textContent = "+ New category";
-              moveSel.appendChild(newOpt);
-              moveSel.addEventListener("change", function () {
-                var val = moveSel.value;
-                if (val === "__new__") {
-                  var name = window.prompt("New category name for " + habit.name + ":");
-                  if (!name || !name.trim()) { moveSel.value = habit.category || cats[0] || ""; return; }
-                  val = name.trim();
-                }
-                moveHabit(habit.id, val);
-              });
-              li.appendChild(moveSel);
-
-              var ren = document.createElement("button");
-              ren.type = "button";
-              ren.className = "del-btn";
-              ren.textContent = "✎";
-              ren.setAttribute("aria-label", "Rename habit " + habit.name);
-              ren.addEventListener("click", function () { renameHabit(habit.id); });
-              li.appendChild(ren);
-
-              var del = document.createElement("button");
-              del.type = "button";
-              del.className = "del-btn";
-              del.textContent = "×";
-              del.setAttribute("aria-label", "Remove habit " + habit.name);
-              del.addEventListener("click", function () { deleteHabit(habit.id); });
-              li.appendChild(del);
-            }
+            // Pencil is always visible: all per-habit edits (rename,
+            // color, category, fields, delete) live in this modal, not
+            // scattered across edit mode and the footer.
+            var editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.className = "edit-btn";
+            editBtn.textContent = "✎";
+            editBtn.setAttribute("aria-label", "Edit habit " + habit.name);
+            editBtn.addEventListener("click", function () { openEditModal(habit.id); });
+            li.appendChild(editBtn);
             ul.appendChild(li);
           });
           wrapDiv.appendChild(ul);
@@ -1325,6 +1335,142 @@
         render();
       }
 
+      // ---------- Per-habit edit modal ----------
+      var modalHabitId = null, modalOrigName = null, modalOrigColor = null;
+      var modalFieldsWorking = [], modalFieldsDeleted = [], modalPickedColor = null, modalDeleteArmed = false;
+      function openEditModal(habitId) {
+        var habit = habitById(habitId);
+        if (!habit) return;
+        modalHabitId = habitId;
+        modalOrigName = habit.name;
+        modalOrigColor = habit.color || null;
+        modalPickedColor = habit.color || null;
+        modalFieldsWorking = fieldsForHabit(habit.name).map(function (f) {
+          return { orig: f.field, name: f.field, unit: f.unit || "" };
+        });
+        modalFieldsDeleted = [];
+        modalDeleteArmed = false;
+        var delBtn = document.getElementById("modalDelete");
+        delBtn.textContent = "Delete habit";
+        delBtn.classList.remove("armed");
+        document.getElementById("modalTitle").textContent = "Edit habit";
+        document.getElementById("modalName").value = habit.name;
+        var sel = document.getElementById("modalCategory");
+        sel.innerHTML = "";
+        var cats = [];
+        state.habits.forEach(function (h) { if (h.category && cats.indexOf(h.category) === -1) cats.push(h.category); });
+        cats.forEach(function (c) {
+          var opt = document.createElement("option");
+          opt.value = c;
+          opt.textContent = c;
+          if (c === habit.category) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        renderModalColorPick();
+        renderModalFields();
+        document.getElementById("editModal").hidden = false;
+      }
+      function closeEditModal() {
+        modalHabitId = null;
+        document.getElementById("editModal").hidden = true;
+      }
+      function renderModalColorPick() {
+        var wrap = document.getElementById("modalColorPick");
+        wrap.innerHTML = "";
+        PALETTE.forEach(function (c) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "color-swatch" + (c === modalPickedColor ? " selected" : "");
+          b.style.background = c;
+          b.setAttribute("aria-label", "Color " + c);
+          b.addEventListener("click", function () { modalPickedColor = c; renderModalColorPick(); });
+          wrap.appendChild(b);
+        });
+      }
+      function renderModalFields() {
+        var wrap = document.getElementById("modalFieldList");
+        wrap.innerHTML = "";
+        modalFieldsWorking.forEach(function (f, idx) {
+          var row = document.createElement("div");
+          row.className = "modal-field-row";
+          var nameInput = document.createElement("input");
+          nameInput.type = "text";
+          nameInput.value = f.name;
+          nameInput.setAttribute("aria-label", "Field name");
+          nameInput.addEventListener("input", function () { f.name = nameInput.value.trim(); });
+          var unitInput = document.createElement("input");
+          unitInput.type = "text";
+          unitInput.value = f.unit;
+          unitInput.placeholder = "Unit";
+          unitInput.setAttribute("aria-label", "Field unit");
+          unitInput.addEventListener("input", function () { f.unit = unitInput.value.trim(); });
+          var del = document.createElement("button");
+          del.type = "button";
+          del.textContent = "×";
+          del.setAttribute("aria-label", "Delete field " + f.name);
+          del.addEventListener("click", function () {
+            if (f.orig) modalFieldsDeleted.push(f.orig);
+            modalFieldsWorking.splice(idx, 1);
+            renderModalFields();
+          });
+          row.appendChild(nameInput);
+          row.appendChild(unitInput);
+          row.appendChild(del);
+          wrap.appendChild(row);
+        });
+      }
+      function saveEditModal() {
+        var habit = habitById(modalHabitId);
+        if (!habit) { closeEditModal(); return; }
+        var newName = document.getElementById("modalName").value.trim();
+        var newCategory = document.getElementById("modalCategory").value;
+        if (!newName) return;
+        var dup = state.habits.some(function (h) { return h.id !== habit.id && h.name === newName; });
+        if (dup) { window.alert("A habit named \"" + newName + "\" already exists — pick a different name."); return; }
+        var oldName = modalOrigName;
+        var colorChanged = (modalPickedColor || null) !== (modalOrigColor || null);
+        // Rename first: the script renames the name in every tab, so
+        // every action after this must use the new name.
+        if (newName !== oldName) {
+          habit.name = newName;
+          (state.habitFields || []).forEach(function (f) { if (f.habit === oldName) f.habit = newName; });
+          apiPost({ action: "renameHabit", oldName: oldName, newName: newName });
+        }
+        if (newCategory !== habit.category) {
+          habit.category = newCategory;
+          apiPost({ action: "updateHabit", name: newName, category: newCategory });
+        }
+        if (colorChanged) {
+          habit.color = modalPickedColor || null;
+          apiPost({ action: "updateHabitColor", name: newName, color: modalPickedColor || "" });
+        }
+        modalFieldsDeleted.forEach(function (orig) {
+          state.habitFields = (state.habitFields || []).filter(function (f) { return !(f.habit === newName && f.field === orig); });
+          apiPost({ action: "removeField", habit: newName, field: orig });
+        });
+        modalFieldsWorking.forEach(function (f) {
+          if (!f.name) return;
+          if (!f.orig) {
+            var dupField = (state.habitFields || []).some(function (x) { return x.habit === newName && x.field === f.name; });
+            if (!dupField) {
+              state.habitFields.push({ habit: newName, field: f.name, unit: f.unit, type: "number" });
+              apiPost({ action: "addField", habit: newName, field: f.name, unit: f.unit, type: "number" });
+            }
+          } else {
+            var origEntry = null;
+            (state.habitFields || []).forEach(function (x) { if (x.habit === newName && x.field === f.orig) origEntry = x; });
+            if (origEntry && (f.name !== f.orig || (origEntry.unit || "") !== f.unit)) {
+              origEntry.field = f.name;
+              origEntry.unit = f.unit;
+              apiPost({ action: "renameField", habit: newName, oldField: f.orig, newField: f.name, unit: f.unit });
+            }
+          }
+        });
+        closeEditModal();
+        saveState();
+        render();
+      }
+
       // ---------- Habit metadata: fields + per-day values ----------
       var valuesPanelHabitId = null;
       function openValuesPanel(habitId) {
@@ -1379,46 +1525,6 @@
         saveState();
         render();
       }
-      function renderFieldEditor() {
-        var editor = document.getElementById("fieldEditor");
-        editor.hidden = !editing;
-        if (!editing) return;
-        var sel = document.getElementById("fieldHabit");
-        sel.innerHTML = "";
-        state.habits.forEach(function (h) {
-          var opt = document.createElement("option");
-          opt.value = h.id;
-          opt.textContent = (h.category ? h.category + " · " : "") + h.name;
-          sel.appendChild(opt);
-        });
-        var list = document.getElementById("fieldList");
-        list.innerHTML = "";
-        (state.habitFields || []).forEach(function (f) {
-          var row = document.createElement("div");
-          row.className = "field-list-row";
-          var span = document.createElement("span");
-          span.textContent = f.habit + " — " + f.field + (f.unit ? " (" + f.unit + ")" : "");
-          var del = document.createElement("button");
-          del.type = "button";
-          del.textContent = "×";
-          del.setAttribute("aria-label", "Remove field " + f.field + " from " + f.habit);
-          del.addEventListener("click", function () {
-            state.habitFields = (state.habitFields || []).filter(function (x) { return !(x.habit === f.habit && x.field === f.field); });
-            for (var day in (state.values || {})) {
-              state.habits.forEach(function (h) {
-                if (h.name === f.habit && state.values[day][h.id]) delete state.values[day][h.id][f.field];
-              });
-            }
-            apiPost({ action: "removeField", habit: f.habit, field: f.field });
-            saveState();
-            render();
-          });
-          row.appendChild(span);
-          row.appendChild(del);
-          list.appendChild(row);
-        });
-      }
-
       document.getElementById("backToday").addEventListener("click", function () {
         selectedDay = toDayStr(new Date());
         render();
@@ -1449,22 +1555,37 @@
         valuesPanelHabitId = null;
         render();
       });
-      document.getElementById("fieldAddBtn").addEventListener("click", function () {
-        var habit = habitById(document.getElementById("fieldHabit").value);
-        var fieldName = document.getElementById("fieldName").value.trim();
-        var unit = document.getElementById("fieldUnit").value.trim();
-        if (!habit || !fieldName) return;
-        var dup = (state.habitFields || []).some(function (f) {
-          return f.habit === habit.name && f.field.toLowerCase() === fieldName.toLowerCase();
-        });
+      document.getElementById("modalSave").addEventListener("click", saveEditModal);
+      document.getElementById("modalCancel").addEventListener("click", closeEditModal);
+      document.getElementById("editModal").addEventListener("click", function (ev) {
+        if (ev.target === document.getElementById("editModal")) closeEditModal();
+      });
+      document.getElementById("modalColorFollow").addEventListener("click", function () {
+        modalPickedColor = null;
+        renderModalColorPick();
+      });
+      document.getElementById("modalAddField").addEventListener("click", function () {
+        var fieldName = document.getElementById("modalNewFieldName").value.trim();
+        var unit = document.getElementById("modalNewFieldUnit").value.trim();
+        if (!fieldName) return;
+        var dup = modalFieldsWorking.some(function (f) { return f.name.toLowerCase() === fieldName.toLowerCase(); });
         if (dup) return;
-        if (!state.habitFields) state.habitFields = [];
-        state.habitFields.push({ habit: habit.name, field: fieldName, unit: unit, type: "number" });
-        apiPost({ action: "addField", habit: habit.name, field: fieldName, unit: unit, type: "number" });
-        document.getElementById("fieldName").value = "";
-        document.getElementById("fieldUnit").value = "";
-        saveState();
-        render();
+        modalFieldsWorking.push({ orig: null, name: fieldName, unit: unit });
+        document.getElementById("modalNewFieldName").value = "";
+        document.getElementById("modalNewFieldUnit").value = "";
+        renderModalFields();
+      });
+      document.getElementById("modalDelete").addEventListener("click", function () {
+        if (!modalDeleteArmed) {
+          modalDeleteArmed = true;
+          var b = document.getElementById("modalDelete");
+          b.textContent = "Tap again to confirm delete";
+          b.classList.add("armed");
+          return;
+        }
+        var id = modalHabitId;
+        closeEditModal();
+        deleteHabit(id);
       });
 
       var newName = document.getElementById("newName");
