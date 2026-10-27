@@ -144,6 +144,12 @@
       .heat-cell.today { outline: 1.5px solid var(--accent); outline-offset: 0; }
       .heat-daynum { flex: 1 1 0; min-width: 0; overflow: hidden; text-align: center; font-size: 0.6rem; color: var(--dim); line-height: 1; }
       .heatmap-note { color: var(--dim); font-size: 0.85rem; margin: 0.6rem 0 0.25rem; }
+      /* Per-category heatmap under each group's habits (Pillars-style
+         "trends": one row per habit, one cell per day, solid habit color
+         when done). Wider labels than the top heatmap, since habit names
+         are longer than category names. */
+      .cat-heat { margin-top: 0.7rem; }
+      .cat-heat .heat-label { flex-basis: 110px; }
 
       /* ---- Backfill panel ---- */
       .backfill-card {
@@ -857,6 +863,57 @@
         });
       }
 
+      // Per-category heatmap: one row per habit in the group, one cell
+      // per day in the current month, solid habit color when done.
+      // Tapping a cell jumps to that day, same as the top heatmap.
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+      function renderCategoryHeatmap(group) {
+        var d = parseDay(today);
+        var year = d.getFullYear(), month = d.getMonth();
+        var daysInMonth = new Date(year, month + 1, 0).getDate();
+        function dayStr(dayNum) {
+          var m = String(month + 1).padStart(2, "0");
+          var dd = String(dayNum).padStart(2, "0");
+          return year + "-" + m + "-" + dd;
+        }
+        var html = '<div class="heat-row"><span class="heat-label"></span><span class="heat-cells">';
+        for (var dn = 1; dn <= daysInMonth; dn++) html += '<span class="heat-daynum">' + dn + "</span>";
+        html += "</span></div>";
+        group.items.forEach(function (habit) {
+          var color = habitColor(habit);
+          html += '<div class="heat-row"><span class="heat-label">' + escapeHtml(habit.name) + '</span><span class="heat-cells">';
+          for (var day = 1; day <= daysInMonth; day++) {
+            var ds = dayStr(day);
+            if (ds > today) {
+              html += '<span class="heat-cell future" title="' + ds + '"></span>';
+              continue;
+            }
+            var done = !!(state.checks[ds] && state.checks[ds][habit.id]);
+            var cls = "heat-cell" + (ds === today ? " today" : "");
+            var style = done ? ' style="background:' + color + ';border-color:transparent"' : "";
+            html += '<button type="button" class="' + cls + '" data-day="' + ds + '"' + style +
+              ' aria-label="' + ds + " · " + escapeHtml(habit.name) + (done ? ": done" : "") + '"' +
+              ' title="' + ds + " · " + escapeHtml(habit.name) + '"></button>';
+          }
+          html += "</span></div>";
+        });
+        var scroll = document.createElement("div");
+        scroll.className = "heatmap-scroll cat-heat";
+        var grid = document.createElement("div");
+        grid.className = "heatmap";
+        grid.innerHTML = html;
+        grid.querySelectorAll(".heat-cell[data-day]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            selectedDay = btn.getAttribute("data-day");
+            render();
+          });
+        });
+        scroll.appendChild(grid);
+        return scroll;
+      }
+
       // ---------- Backfill: one habit, many days, one screen ----------
       var backfillOpen = false;
       var backfillHabitId = null;
@@ -1132,6 +1189,7 @@
             ul.appendChild(li);
           });
           wrapDiv.appendChild(ul);
+          wrapDiv.appendChild(renderCategoryHeatmap(group));
           habitList.appendChild(wrapDiv);
         });
 
