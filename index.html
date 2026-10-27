@@ -105,9 +105,15 @@
 
       /* ---- Graph card ---- */
       .graph-card {
+        position: relative;
         margin-top: 1.1rem; padding: 1rem 1rem 0.75rem;
         background: var(--surface); border: 1px solid var(--border);
         border-radius: var(--radius);
+      }
+      .graph-edit {
+        position: absolute; top: 0.6rem; right: 0.6rem;
+        background: none; border: none; padding: 0.25rem;
+        color: var(--dim); font-size: 1.1rem; line-height: 1;
       }
       .graph-total { display: flex; align-items: baseline; gap: 0.75rem; }
       .graph-total .big { font-size: 3.2rem; font-weight: 600; line-height: 1; }
@@ -317,6 +323,7 @@
       </header>
 
       <section class="graph-card" aria-label="Daily score, by category">
+        <button type="button" class="graph-edit" id="graphEdit" aria-label="Edit categories">✎</button>
         <div class="graph-total">
           <span class="big font-display" id="totalBig">0</span>
           <span class="cap" id="totalCap">daily score</span>
@@ -380,6 +387,19 @@
         </div>
       </div>
 
+      <div class="modal-backdrop" id="categoriesModal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit categories">
+          <h2>Categories</h2>
+          <label>Category order — drag a category to reorder it; the habit list, bar chart and per-category heatmaps all follow this order</label>
+          <div id="categoryOrderList"></div>
+          <label>Category colors — tap a color to recolor that whole category</label>
+          <div id="categoryColors"></div>
+          <div class="modal-row">
+            <button type="button" class="modal-cancel" id="categoriesClose">Done</button>
+          </div>
+        </div>
+      </div>
+
       <div class="cat-viewer" role="group" aria-label="Category">
         <button type="button" class="day-nav" id="catPrev" aria-label="Previous category">‹</button>
         <h2 id="catName"></h2>
@@ -393,7 +413,7 @@
         <div class="footer-actions">
           <button type="button" class="footer-btn" id="syncBtn">Sync now</button>
           <button type="button" class="footer-btn" id="backfillToggle" aria-expanded="false">Backfill a habit</button>
-          <button type="button" class="footer-btn" id="editToggle" aria-expanded="false">Edit habits</button>
+          <button type="button" class="footer-btn" id="editToggle" aria-expanded="false">New habit</button>
         </div>
         <p class="device-note" id="syncNote">Sync: not yet checked.</p>
         <form class="add" id="addForm" hidden>
@@ -404,10 +424,6 @@
           <datalist id="categoryList"></datalist>
           <label>Color (optional — leave it to follow the category)</label>
           <div class="color-pick" id="colorPick" role="group" aria-label="Habit color"></div>
-          <label>Category colors — tap a color to recolor that whole category</label>
-          <div id="categoryColors"></div>
-          <label>Category order — drag a category to reorder it; the habit list, bar chart and per-category heatmaps all follow this order</label>
-          <div id="categoryOrderList"></div>
           <button type="submit" id="addBtn" disabled>Add habit</button>
         </form>
         <p class="device-note">Check-ins sync to a Google Sheet when online, and are also saved on this device as a backup. To keep the tracker on your Home Screen, open this page in Safari and choose Share &rarr; Add to Home Screen.</p>
@@ -1257,10 +1273,13 @@
         saveState();
         render();
       }
+      // Category colors and order live behind the bar-chart pencil
+      // modal, not in the New habit form.
+      var categoriesOpen = false;
       function renderCategoryColors() {
         var wrap = document.getElementById("categoryColors");
         wrap.innerHTML = "";
-        if (!editing) return;
+        if (!categoriesOpen) return;
         categoryOrder().filter(function (c) {
           return state.habits.some(function (h) { return (h.category || "Other") === c; });
         }).forEach(function (c) {
@@ -1290,7 +1309,7 @@
       function renderCategoryOrder() {
         var wrap = document.getElementById("categoryOrderList");
         wrap.innerHTML = "";
-        if (!editing) return;
+        if (!categoriesOpen) return;
         var cats = categoryOrder().filter(function (c) {
           return state.habits.some(function (h) { return (h.category || "Other") === c; });
         });
@@ -1615,6 +1634,7 @@
         if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
         if (!document.getElementById("editModal").hidden) return;
         if (!document.getElementById("valuesModal").hidden) return;
+        if (!document.getElementById("categoriesModal").hidden) return;
         stepCategory(ev.key === "ArrowLeft" ? -1 : 1);
       });
 
@@ -1622,10 +1642,26 @@
       var addForm = document.getElementById("addForm");
       editToggle.addEventListener("click", function () {
         editing = !editing;
-        editToggle.textContent = editing ? "Done editing" : "Edit habits";
+        editToggle.textContent = editing ? "Done" : "New habit";
         editToggle.setAttribute("aria-expanded", editing ? "true" : "false");
         addForm.hidden = !editing;
         render();
+      });
+      // Bar-chart pencil: category order and colors live here.
+      function openCategoriesModal() {
+        categoriesOpen = true;
+        document.getElementById("categoriesModal").hidden = false;
+        render();
+      }
+      function closeCategoriesModal() {
+        categoriesOpen = false;
+        document.getElementById("categoriesModal").hidden = true;
+        render();
+      }
+      document.getElementById("graphEdit").addEventListener("click", openCategoriesModal);
+      document.getElementById("categoriesClose").addEventListener("click", closeCategoriesModal);
+      document.getElementById("categoriesModal").addEventListener("click", function (ev) {
+        if (ev.target === document.getElementById("categoriesModal")) closeCategoriesModal();
       });
       document.getElementById("valuesModalSave").addEventListener("click", saveValuesModal);
       document.getElementById("valuesModalSkip").addEventListener("click", closeValuesModal);
