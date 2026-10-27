@@ -82,6 +82,8 @@
       /* ---- Category viewer: one category at a time ---- */
       .cat-viewer { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.25rem; }
       .cat-viewer h2 { flex: 1; text-align: center; font-size: 1.65rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+      .cat-edit { flex: none; background: none; border: none; padding: 0.25rem; color: var(--dim); font-size: 1.1rem; line-height: 1; }
+      .cat-goal { text-align: center; color: var(--dim); font-size: 0.9rem; font-style: italic; margin: 0.15rem 0 0; }
       .back-today {
         background: none; border: none; padding: 0.25rem 0;
         color: var(--accent); font-weight: 600; font-size: 0.9rem; white-space: nowrap;
@@ -387,6 +389,20 @@
         </div>
       </div>
 
+      <div class="modal-backdrop" id="categoryModal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit category">
+          <h2>Edit category</h2>
+          <label for="catModalName">Name</label>
+          <input id="catModalName" type="text" autocomplete="off" />
+          <label for="catModalGoal">Goal — what this category is working toward</label>
+          <input id="catModalGoal" type="text" placeholder="e.g. Reach 160 lbs" autocomplete="off" />
+          <div class="modal-row">
+            <button type="button" class="modal-save" id="catModalSave">Save</button>
+            <button type="button" class="modal-cancel" id="catModalCancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-backdrop" id="categoriesModal" hidden>
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit categories">
           <h2>Categories</h2>
@@ -403,9 +419,11 @@
       <div class="cat-viewer" role="group" aria-label="Category">
         <button type="button" class="day-nav" id="catPrev" aria-label="Previous category">‹</button>
         <h2 id="catName"></h2>
+        <button type="button" class="cat-edit" id="catEdit" aria-label="Edit category">✎</button>
         <button type="button" class="day-nav" id="catNext" aria-label="Next category">›</button>
       </div>
       <p class="cat-count" id="catCount" style="text-align:center;color:var(--dim);font-size:0.85rem;margin:0.15rem 0 0"></p>
+      <p class="cat-goal" id="catGoal" hidden></p>
 
       <section id="habitList" aria-label="Habits"></section>
 
@@ -618,6 +636,9 @@
             if (data.categoryOrder && Array.isArray(data.categoryOrder)) {
               storedCategoryOrder = data.categoryOrder;
               state.categoryOrder = data.categoryOrder;
+            }
+            if (data.categoryGoals && typeof data.categoryGoals === "object") {
+              state.categoryGoals = data.categoryGoals;
             }
             saveState();
             setSyncNote("synced with Google Sheet");
@@ -1140,6 +1161,10 @@
         document.getElementById("catCount").textContent = viewGroup
           ? viewDone + " of " + viewGroup.items.length + " done · " + (viewCats.indexOf(viewCat) + 1) + " of " + viewCats.length
           : "";
+        var catGoalEl = document.getElementById("catGoal");
+        var catGoal = viewCat && state.categoryGoals ? state.categoryGoals[viewCat] : "";
+        catGoalEl.hidden = !catGoal;
+        catGoalEl.textContent = catGoal ? "Goal: " + catGoal : "";
         document.getElementById("catPrev").disabled = viewCats.length <= 1;
         document.getElementById("catNext").disabled = viewCats.length <= 1;
 
@@ -1627,6 +1652,53 @@
 
       document.getElementById("catPrev").addEventListener("click", function () { stepCategory(-1); });
       document.getElementById("catNext").addEventListener("click", function () { stepCategory(1); });
+      // Viewer pencil: rename the category and set its goal.
+      var catModalCategory = null;
+      function openCategoryModal() {
+        var cat = currentViewCategory();
+        if (!cat) return;
+        catModalCategory = cat;
+        document.getElementById("catModalName").value = cat;
+        document.getElementById("catModalGoal").value = (state.categoryGoals && state.categoryGoals[cat]) || "";
+        document.getElementById("categoryModal").hidden = false;
+      }
+      function closeCategoryModal() {
+        catModalCategory = null;
+        document.getElementById("categoryModal").hidden = true;
+      }
+      function saveCategoryModal() {
+        var oldName = catModalCategory;
+        if (!oldName) { closeCategoryModal(); return; }
+        var newName = document.getElementById("catModalName").value.trim();
+        var goal = document.getElementById("catModalGoal").value.trim();
+        if (!newName) { window.alert("A category needs a name."); return; }
+        if (newName !== oldName && viewerCategories().indexOf(newName) !== -1) {
+          window.alert("A category named \"" + newName + "\" already exists — pick a different name.");
+          return;
+        }
+        if (newName !== oldName) {
+          state.habits.forEach(function (h) { if ((h.category || "Other") === oldName) h.category = newName; });
+          if (storedCategoryOrder) storedCategoryOrder = storedCategoryOrder.map(function (c) { return c === oldName ? newName : c; });
+          if (state.categoryOrder) state.categoryOrder = state.categoryOrder.map(function (c) { return c === oldName ? newName : c; });
+          viewCategory = newName;
+          apiPost({ action: "renameCategory", oldName: oldName, newName: newName });
+        }
+        if (!state.categoryGoals) state.categoryGoals = {};
+        if (goal) state.categoryGoals[newName] = goal;
+        else delete state.categoryGoals[newName];
+        if (newName !== oldName) delete state.categoryGoals[oldName];
+        // Whole-object write, so it stays correct whichever post lands first.
+        apiPost({ action: "updateCategoryGoals", goals: state.categoryGoals });
+        closeCategoryModal();
+        saveState();
+        render();
+      }
+      document.getElementById("catEdit").addEventListener("click", openCategoryModal);
+      document.getElementById("catModalSave").addEventListener("click", saveCategoryModal);
+      document.getElementById("catModalCancel").addEventListener("click", closeCategoryModal);
+      document.getElementById("categoryModal").addEventListener("click", function (ev) {
+        if (ev.target === document.getElementById("categoryModal")) closeCategoryModal();
+      });
       document.addEventListener("keydown", function (ev) {
         if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
         // Never hijack arrows while typing, or while a modal is open.
@@ -1635,6 +1707,7 @@
         if (!document.getElementById("editModal").hidden) return;
         if (!document.getElementById("valuesModal").hidden) return;
         if (!document.getElementById("categoriesModal").hidden) return;
+        if (!document.getElementById("categoryModal").hidden) return;
         stepCategory(ev.key === "ArrowLeft" ? -1 : 1);
       });
 
